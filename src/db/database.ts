@@ -1,4 +1,5 @@
 import type { ModelConfig, FeishuConfig, Conversation, Message, Note } from '@/shared/types';
+import { STORAGE_KEYS } from '@/shared/constants';
 
 /**
  * Application data stored in chrome.storage.local
@@ -12,7 +13,7 @@ export interface AppData {
   nextId: number;
 }
 
-const STORAGE_KEY = 'ai_summary_data';
+const STORAGE_KEY = STORAGE_KEYS.DB_DATA;
 
 let cachedData: AppData | null = null;
 
@@ -30,7 +31,7 @@ function getDefaultData(): AppData {
 /**
  * Initialize the data store.
  * Loads existing data from chrome.storage.local or creates default empty data.
- * Instant — no WASM loading needed.
+ * Includes data migration to ensure all fields exist.
  */
 export async function initDatabase(): Promise<AppData> {
   if (cachedData) return cachedData;
@@ -38,6 +39,13 @@ export async function initDatabase(): Promise<AppData> {
   const result = await chrome.storage.local.get(STORAGE_KEY);
   if (result[STORAGE_KEY]) {
     cachedData = result[STORAGE_KEY] as AppData;
+    // 数据迁移：确保所有字段都存在（兼容旧版本数据）
+    if (!Array.isArray(cachedData.modelConfigs)) cachedData.modelConfigs = [];
+    if (!Array.isArray(cachedData.feishuConfigs)) cachedData.feishuConfigs = [];
+    if (!Array.isArray(cachedData.conversations)) cachedData.conversations = [];
+    if (!Array.isArray(cachedData.messages)) cachedData.messages = [];
+    if (!Array.isArray(cachedData.notes)) cachedData.notes = [];
+    if (!cachedData.nextId) cachedData.nextId = 1;
   } else {
     cachedData = getDefaultData();
     await saveDatabase();
@@ -60,10 +68,16 @@ export function getDb(): AppData {
 
 /**
  * Save current data to chrome.storage.local.
+ * Throws on failure so callers can handle errors.
  */
 export async function saveDatabase(): Promise<void> {
   if (!cachedData) return;
-  await chrome.storage.local.set({ [STORAGE_KEY]: cachedData });
+  try {
+    await chrome.storage.local.set({ [STORAGE_KEY]: cachedData });
+  } catch (err) {
+    console.error('[PageLens] Failed to save database:', err);
+    throw err;
+  }
 }
 
 /**

@@ -1,3 +1,14 @@
+// ===================== Think Mode =====================
+export const THINK_MODES = {
+  none: { label: '直接回答', rounds: 0 },
+  normal: { label: '一般思考', rounds: 1 },
+  deep: { label: '深度思考', rounds: 3 },
+} as const;
+
+export const MAX_THINK_ROUNDS = 5;
+export const DEFAULT_NORMAL_ROUNDS = 1;
+export const DEFAULT_DEEP_ROUNDS = 3;
+
 // ===================== Message Types =====================
 export const MSG_TYPES = {
   // Page extraction
@@ -9,6 +20,7 @@ export const MSG_TYPES = {
   CHAT_STREAM_CHUNK: 'CHAT_STREAM_CHUNK',
   CHAT_STREAM_END: 'CHAT_STREAM_END',
   CHAT_STREAM_ERROR: 'CHAT_STREAM_ERROR',
+  THINK_STREAM_START: 'THINK_STREAM_START',
   CANCEL_STREAM: 'CANCEL_STREAM',
 
   // Connection testing
@@ -52,10 +64,12 @@ export const PROMPTS = {
 
 // ===================== Storage Keys =====================
 export const STORAGE_KEYS = {
-  DB_DATA: 'ai_summary_db_data',
+  DB_DATA: 'ai_summary_data',
   DB_VERSION: 'ai_summary_db_version',
   SETTINGS_LANGUAGE: 'ai_summary_language',
   SETTINGS_THEME: 'ai_summary_theme',
+  THINK_NORMAL_ROUNDS: 'ai_summary_think_normal_rounds',
+  THINK_DEEP_ROUNDS: 'ai_summary_think_deep_rounds',
 } as const;
 
 // ===================== DB Constants =====================

@@ -10,12 +10,14 @@ import { useModels } from '@/sidepanel/hooks/useModels';
 import { modelConfigRepo } from '@/db/repositories/model-config.repo';
 import { useToast } from '@/sidepanel/components/shared/Toast';
 import { MSG_TYPES } from '@/shared/constants';
+import type { ThinkMode } from '@/shared/types';
 
 export function ChatPage() {
   const chat = useChat();
   const { models } = useModels();
   const { showToast } = useToast();
   const [sending, setSending] = useState(false);
+  const [thinkMode, setThinkMode] = useState<ThinkMode>('none');
   const pageContextRef = useRef<{ url: string; content: string } | null>(null);
 
   // Set default model on mount
@@ -57,13 +59,15 @@ export function ChatPage() {
         // 提取失败时静默忽略，消息照常发送
       }
 
+      // Set think mode in store before sending
+      chat.setThinkMode(thinkMode);
       await chat.sendMessage(content, pageContext);
     } catch (err: any) {
       showToast('error', err.message || '发送失败');
     } finally {
       setSending(false);
     }
-  }, [chat, showToast]);
+  }, [chat, showToast, thinkMode]);
 
   const handleQuickAction = useCallback((prompt: string) => {
     handleSend(prompt);
@@ -103,6 +107,9 @@ export function ChatPage() {
           isStreaming={chat.isStreaming}
           streamingContent={chat.streamingContent}
           conversationTitle={chat.conversations.find(c => c.id === chat.currentConversationId)?.title}
+          thinkingProcess={chat.thinkingProcess}
+          isThinking={chat.isThinking}
+          currentThinkRound={chat.currentThinkRound}
         />
       ) : (
         <EmptyState
@@ -126,6 +133,8 @@ export function ChatPage() {
         onCancel={chat.cancelStream}
         isStreaming={chat.isStreaming}
         disabled={sending && !chat.isStreaming}
+        thinkMode={thinkMode}
+        onThinkModeChange={setThinkMode}
       />
     </div>
   );

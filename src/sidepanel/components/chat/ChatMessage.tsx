@@ -5,6 +5,7 @@ import { formatDate } from '@/shared/utils';
 import { noteRepo } from '@/db/repositories/note.repo';
 import { useToast } from '@/sidepanel/components/shared/Toast';
 import { MarkdownRenderer } from '@/sidepanel/components/shared/MarkdownRenderer';
+import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
   message: Message;
@@ -36,6 +37,7 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
       showToast('success', '已保存为笔记');
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
+      console.error('[PageLens] Failed to save note:', err);
       showToast('error', '保存失败');
     }
   };
@@ -55,6 +57,14 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
 
       {/* Content */}
       <div className={`flex-1 min-w-0 ${isUser ? 'text-right' : 'text-left'}`}>
+        {/* Thinking process panel (only for assistant messages) */}
+        {!isUser && message.thinking_process && message.thinking_process.length > 0 && (
+          <ThinkingProcessPanel
+            processes={message.thinking_process}
+            isThinking={false}
+          />
+        )}
+
         <div
           className={`inline-block text-left max-w-[90%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
             isUser

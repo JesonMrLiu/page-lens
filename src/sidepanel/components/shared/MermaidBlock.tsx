@@ -13,14 +13,19 @@ interface MermaidBlockProps {
 }
 
 export function MermaidBlock({ code }: MermaidBlockProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState(false);
   const reactId = useId();
+  const renderCountRef = useRef(0);
 
   useEffect(() => {
-    // 使用 reactId 生成唯一的 mermaid 渲染 ID（去掉冒号以符合 mermaid ID 规范）
-    const mermaidId = `mermaid-${reactId.replace(/:/g, '-')}`;
+    // 关键修复：每次 render 前重置所有状态
+    setSvg('');
+    setError(false);
+
+    // 使用递增后缀避免 Mermaid ID 复用导致的缓存问题
+    renderCountRef.current += 1;
+    const mermaidId = `mermaid-${reactId.replace(/:/g, '-')}-${renderCountRef.current}`;
     let cancelled = false;
 
     mermaid
@@ -28,8 +33,11 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
       .then(({ svg }) => {
         if (!cancelled) setSvg(svg);
       })
-      .catch(() => {
-        if (!cancelled) setError(true);
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn('[Mermaid] Render error:', err);
+          setError(true);
+        }
       });
 
     return () => {
@@ -53,7 +61,6 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
 
   return (
     <div
-      ref={containerRef}
       className="overflow-x-auto flex justify-center [&>svg]:max-w-full"
       dangerouslySetInnerHTML={{ __html: svg }}
     />

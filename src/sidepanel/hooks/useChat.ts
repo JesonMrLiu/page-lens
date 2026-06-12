@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react';
 import { useChatStore } from '@/sidepanel/stores/chat-store';
 import { modelConfigRepo } from '@/db/repositories/model-config.repo';
-import { MSG_TYPES } from '@/shared/constants';
-import type { ChatMessageInput } from '@/shared/types';
+import { MSG_TYPES, STORAGE_KEYS, DEFAULT_NORMAL_ROUNDS, DEFAULT_DEEP_ROUNDS } from '@/shared/constants';
+import type { ChatMessageInput, ThinkMode } from '@/shared/types';
 
 /**
  * Hook for managing chat interactions with AI models.
@@ -12,8 +12,25 @@ export function useChat() {
   const store = useChatStore();
   const abortRef = useRef<AbortController | null>(null);
 
+  const getThinkRounds = useCallback(async (mode: ThinkMode): Promise<number> => {
+    if (mode === 'none') return 0;
+
+    return new Promise((resolve) => {
+      chrome.storage.local.get(
+        [STORAGE_KEYS.THINK_NORMAL_ROUNDS, STORAGE_KEYS.THINK_DEEP_ROUNDS],
+        (result) => {
+          if (mode === 'normal') {
+            resolve(result[STORAGE_KEYS.THINK_NORMAL_ROUNDS] || DEFAULT_NORMAL_ROUNDS);
+          } else {
+            resolve(result[STORAGE_KEYS.THINK_DEEP_ROUNDS] || DEFAULT_DEEP_ROUNDS);
+          }
+        },
+      );
+    });
+  }, []);
+
   const sendMessage = useCallback(async (content: string, pageContext?: string | null) => {
-    const { currentConversationId, selectedModelId } = store;
+    const { currentConversationId, selectedModelId, thinkMode } = store;
 
     // Get model config
     const model = selectedModelId
@@ -64,6 +81,9 @@ export function useChat() {
     // Start streaming
     store.startStreaming();
 
+    // Get think rounds config
+    const thinkRounds = await getThinkRounds(thinkMode);
+
     // Create abort controller
     const abortController = new AbortController();
     abortRef.current = abortController;
@@ -83,6 +103,8 @@ export function useChat() {
           maxTokens: model.max_tokens,
           temperature: model.temperature,
         },
+        thinkMode,
+        thinkRounds,
       });
 
       // Listen for stream chunks
@@ -94,9 +116,21 @@ export function useChat() {
             store.appendStreamContent(message.content);
             break;
 
+          case 'THINK_STREAM_START':
+            store.startThinking();
+            break;
+
+          case 'THINK_STREAM_CHUNK':
+            store.appendThinkContent(message.round, message.content);
+            break;
+
+          case 'THINK_STREAM_ROUND_END':
+            store.endThinkRound(message.round, message.fullContent);
+            break;
+
           case MSG_TYPES.CHAT_STREAM_END:
             chrome.runtime.onMessage.removeListener(listener);
-            store.endStreaming(message.fullContent, model.id)
+            store.endStreaming(message.fullContent, model.id, message.thinkingProcess)
               .then(() => resolve())
               .catch(reject);
             abortRef.current = null;
@@ -113,7 +147,7 @@ export function useChat() {
 
       chrome.runtime.onMessage.addListener(listener);
     });
-  }, [store]);
+  }, [store, getThinkRounds]);
 
   const cancelStream = useCallback(() => {
     if (abortRef.current) {

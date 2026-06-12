@@ -1,5 +1,5 @@
 import { MSG_TYPES } from './constants';
-import type { PageContent, ChatMessageInput, CreateModelConfig } from './types';
+import type { PageContent, ChatMessageInput, CreateModelConfig, ThinkMode } from './types';
 
 // ===================== Message Type Definitions =====================
 export interface ExtractPageMessage {
@@ -17,6 +17,8 @@ export interface ChatRequestMessage {
   conversationId: number;
   modelConfigId: number;
   messages: ChatMessageInput[];
+  thinkMode?: ThinkMode;
+  thinkRounds?: number;
 }
 
 export interface ChatStreamChunkMessage {
@@ -35,6 +37,26 @@ export interface ChatStreamErrorMessage {
   type: typeof MSG_TYPES.CHAT_STREAM_ERROR;
   conversationId: number;
   error: string;
+}
+
+export interface ThinkStreamChunkMessage {
+  type: 'THINK_STREAM_CHUNK';
+  conversationId: number;
+  round: number;
+  content: string;
+}
+
+export interface ThinkStreamStartMessage {
+  type: 'THINK_STREAM_START';
+  conversationId: number;
+  totalRounds: number;
+}
+
+export interface ThinkStreamRoundEndMessage {
+  type: 'THINK_STREAM_ROUND_END';
+  conversationId: number;
+  round: number;
+  fullContent: string;
 }
 
 export interface CancelStreamMessage {
@@ -107,6 +129,9 @@ export type ExtensionMessage =
   | ChatStreamChunkMessage
   | ChatStreamEndMessage
   | ChatStreamErrorMessage
+  | ThinkStreamStartMessage
+  | ThinkStreamChunkMessage
+  | ThinkStreamRoundEndMessage
   | CancelStreamMessage
   | TestAiConnectionMessage
   | TestAiResultMessage

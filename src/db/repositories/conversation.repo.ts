@@ -1,5 +1,5 @@
 import { getDb, saveDatabase, getNextId } from '../database';
-import type { Conversation, Message } from '@/shared/types';
+import type { Conversation, Message, ThinkingProcess } from '@/shared/types';
 
 function now(): string {
   return new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
@@ -63,12 +63,13 @@ export const messageRepo = {
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   },
 
-  async create(conversationId: number, role: Message['role'], content: string, modelConfigId?: number): Promise<Message> {
+  async create(conversationId: number, role: Message['role'], content: string, modelConfigId?: number, thinkingProcess?: ThinkingProcess[]): Promise<Message> {
     const item: Message = {
       id: getNextId(),
       conversation_id: conversationId,
       role,
       content,
+      thinking_process: thinkingProcess && thinkingProcess.length > 0 ? thinkingProcess : undefined,
       model_config_id: modelConfigId ?? null,
       created_at: now(),
     };

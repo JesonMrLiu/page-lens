@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { Send, Square } from 'lucide-react';
+import { ThinkModeSelector } from './ThinkModeSelector';
+import type { ThinkMode } from '@/shared/types';
 
 interface ChatInputProps {
   onSend: (content: string) => void;
@@ -7,9 +9,11 @@ interface ChatInputProps {
   isStreaming: boolean;
   disabled?: boolean;
   placeholder?: string;
+  thinkMode: ThinkMode;
+  onThinkModeChange: (mode: ThinkMode) => void;
 }
 
-export function ChatInput({ onSend, onCancel, isStreaming, disabled, placeholder }: ChatInputProps) {
+export function ChatInput({ onSend, onCancel, isStreaming, disabled, placeholder, thinkMode, onThinkModeChange }: ChatInputProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,6 +46,15 @@ export function ChatInput({ onSend, onCancel, isStreaming, disabled, placeholder
 
   return (
     <div className="border-t border-gray-200 bg-white p-3 shrink-0">
+      {/* Think mode selector */}
+      <div className="mb-2">
+        <ThinkModeSelector
+          value={thinkMode}
+          onChange={onThinkModeChange}
+          disabled={isStreaming}
+        />
+      </div>
+
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}

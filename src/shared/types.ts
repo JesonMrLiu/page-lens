@@ -1,3 +1,12 @@
+// ===================== Think Mode =====================
+export type ThinkMode = 'none' | 'normal' | 'deep';
+
+export interface ThinkingProcess {
+  round: number;       // 第几轮思考
+  content: string;     // 思考内容
+  isThinking: boolean; // 是否是思考阶段（false表示总结阶段）
+}
+
 // ===================== AI Model Config =====================
 export interface ModelConfig {
   id: number;
@@ -65,6 +74,7 @@ export interface Message {
   conversation_id: number;
   role: 'system' | 'user' | 'assistant';
   content: string;
+  thinking_process?: ThinkingProcess[]; // 思考过程记录
   model_config_id: number | null;
   created_at: string;
 }

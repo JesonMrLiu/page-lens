@@ -6,6 +6,8 @@ import type { ComponentPropsWithoutRef } from 'react';
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  /** 是否处于流式输出中，为 true 时跳过 Mermaid 渲染 */
+  isStreaming?: boolean;
 }
 
 /**
@@ -14,12 +16,21 @@ interface MarkdownRendererProps {
 function CodeBlock({
   className,
   children,
+  isStreaming,
   ...props
-}: ComponentPropsWithoutRef<'code'> & { node?: unknown }) {
+}: ComponentPropsWithoutRef<'code'> & { node?: unknown; isStreaming?: boolean }) {
   const match = /language-(mermaid|flowchart|graph)/.exec(className || '');
   const code = String(children).replace(/\n$/, '');
 
   if (match) {
+    // 流式输出期间：Mermaid 代码可能不完整，显示为代码块避免渲染错误
+    if (isStreaming) {
+      return (
+        <pre className="text-xs text-blue-600 bg-blue-50 p-2 rounded overflow-x-auto my-2">
+          <code>{code}</code>
+        </pre>
+      );
+    }
     return <MermaidBlock code={code} />;
   }
 
@@ -56,13 +67,13 @@ function PreBlock({
   return <pre {...props}>{children}</pre>;
 }
 
-export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, className, isStreaming }: MarkdownRendererProps) {
   return (
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          code: CodeBlock,
+          code: (props) => <CodeBlock {...props} isStreaming={isStreaming} />,
           pre: PreBlock,
         }}
       >

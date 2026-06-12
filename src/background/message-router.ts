@@ -1,6 +1,7 @@
 import { MSG_TYPES } from '@/shared/constants';
 import type { ExtensionMessage } from '@/shared/messages';
-import { testConnection, streamChatCompletion } from './ai-client';
+import type { ChatMessageInput } from '@/shared/types';
+import { testConnection, streamChatCompletion, streamThinkingRound } from './ai-client';
 import { testFeishuConnection, createFeishuDocument } from './feishu-client';
 import { extractFromActiveTab } from './page-extractor';
 
@@ -97,7 +98,7 @@ async function handleExtractPage(
 const activeStreams = new Map<number, AbortController>();
 
 async function handleChatRequest(message: any, sender: chrome.runtime.MessageSender): Promise<unknown> {
-  const { conversationId, modelConfigId, messages } = message;
+  const { conversationId, modelConfigId, messages, thinkMode, thinkRounds } = message;
 
   // Look up model config - we need to import the db layer
   // Since service worker can't use sql.js directly, we fetch model config from side panel
@@ -147,9 +148,50 @@ async function handleChatRequest(message: any, sender: chrome.runtime.MessageSen
     }
   };
 
+  // Check if thinking mode is enabled
+  const hasThinking = thinkMode && thinkMode !== 'none' && thinkRounds > 0;
+
+  if (hasThinking) {
+    // Execute multi-round thinking
+    handleThinkingChat({
+      conversationId,
+      messages,
+      modelConfig,
+      thinkRounds,
+      abortController,
+      sendToSender,
+    });
+  } else {
+    // Original logic: direct answer
+    handleDirectChat({
+      conversationId,
+      messages,
+      modelConfig,
+      abortController,
+      sendToSender,
+    });
+  }
+
+  // Return immediately - stream events come via separate messages
+  return { status: 'streaming', conversationId };
+}
+
+// Helper function for direct chat (no thinking)
+function handleDirectChat({
+  conversationId,
+  messages,
+  modelConfig,
+  abortController,
+  sendToSender,
+}: {
+  conversationId: number;
+  messages: ChatMessageInput[];
+  modelConfig: { baseUrl: string; apiKey: string; model: string; maxTokens: number; temperature: number };
+  abortController: AbortController;
+  sendToSender: (msg: any) => void;
+}) {
   let fullContent = '';
 
-  // Start streaming in background - don't await the full stream
   streamChatCompletion({
     baseUrl: modelConfig.baseUrl,
     apiKey: modelConfig.apiKey,
@@ -172,6 +214,7 @@ async function handleChatRequest(message: any, sender: chrome.runtime.MessageSen
         type: MSG_TYPES.CHAT_STREAM_END,
         conversationId,
         fullContent,
+        thinkingProcess: undefined,
       });
     },
     onError: (error) => {
@@ -183,9 +226,191 @@ async function handleChatRequest(message: any, sender: chrome.runtime.MessageSen
       });
     },
   });
+}
 
-  // Return immediately - stream events come via separate messages
-  return { status: 'streaming', conversationId };
+// Helper function for thinking chat
+async function handleThinkingChat({
+  conversationId,
+  messages,
+  modelConfig,
+  thinkRounds,
+  abortController,
+  sendToSender,
+}: {
+  conversationId: number;
+  messages: ChatMessageInput[];
+  modelConfig: { baseUrl: string; apiKey: string; model: string; maxTokens: number; temperature: number };
+  thinkRounds: number;
+  abortController: AbortController;
+  sendToSender: (msg: any) => void;
+}) {
+  const thinkingHistory: string[] = [];
+  const thinkingProcess: { round: number; content: string; isThinking: boolean }[] = [];
+
+  // 通知前端思考开始
+  sendToSender({
+    type: 'THINK_STREAM_START',
+    conversationId,
+    totalRounds: thinkRounds,
+  });
+
+  try {
+    // Execute multiple thinking rounds
+    for (let round = 1; round <= thinkRounds; round++) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      // Build messages with thinking context
+      const thinkMessages = buildThinkMessages(messages, thinkingHistory, round);
+
+      // Stream thinking round
+      const thinkContent = await streamThinkingRound({
+        baseUrl: modelConfig.baseUrl,
+        apiKey: modelConfig.apiKey,
+        model: modelConfig.model,
+        messages: thinkMessages,
+        maxTokens: modelConfig.maxTokens,
+        temperature: modelConfig.temperature,
+        abortSignal: abortController.signal,
+        onChunk: (content) => {
+          sendToSender({
+            type: 'THINK_STREAM_CHUNK',
+            conversationId,
+            round,
+            content,
+          });
+        },
+      });
+
+      thinkingHistory.push(thinkContent);
+      thinkingProcess.push({ round, content: thinkContent, isThinking: true });
+
+      sendToSender({
+        type: 'THINK_STREAM_ROUND_END',
+        conversationId,
+        round,
+        fullContent: thinkContent,
+      });
+    }
+
+    // Final summary round
+    if (abortController.signal.aborted) {
+      return;
+    }
+
+    const summaryMessages = buildSummaryMessages(messages, thinkingHistory);
+    let fullContent = '';
+
+    await streamChatCompletion({
+      baseUrl: modelConfig.baseUrl,
+      apiKey: modelConfig.apiKey,
+      model: modelConfig.model,
+      messages: summaryMessages,
+      maxTokens: modelConfig.maxTokens,
+      temperature: modelConfig.temperature,
+      abortSignal: abortController.signal,
+      onChunk: (content) => {
+        fullContent += content;
+        sendToSender({
+          type: MSG_TYPES.CHAT_STREAM_CHUNK,
+          conversationId,
+          content,
+        });
+      },
+      onEnd: () => {
+        activeStreams.delete(conversationId);
+        sendToSender({
+          type: MSG_TYPES.CHAT_STREAM_END,
+          conversationId,
+          fullContent,
+          thinkingProcess,
+        });
+      },
+      onError: (error) => {
+        activeStreams.delete(conversationId);
+        sendToSender({
+          type: MSG_TYPES.CHAT_STREAM_ERROR,
+          conversationId,
+          error,
+        });
+      },
+    });
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      return;
+    }
+    activeStreams.delete(conversationId);
+    sendToSender({
+      type: MSG_TYPES.CHAT_STREAM_ERROR,
+      conversationId,
+      error: error.message || 'Thinking process failed',
+    });
+  }
+}
+
+// Build messages for a thinking round
+function buildThinkMessages(
+  originalMessages: ChatMessageInput[],
+  thinkingHistory: string[],
+  currentRound: number,
+): ChatMessageInput[] {
+  const messages: ChatMessageInput[] = [];
+
+  // Add original messages (excluding the last user message for context)
+  for (let i = 0; i < originalMessages.length - 1; i++) {
+    messages.push(originalMessages[i]);
+  }
+
+  // Add thinking context if there are previous rounds
+  if (thinkingHistory.length > 0) {
+    const thinkingContext = thinkingHistory
+      .map((content, index) => `【第${index + 1}轮思考】\n${content}`)
+      .join('\n\n');
+
+    messages.push({
+      role: 'system',
+      content: `以下是之前的思考过程，请在此基础上进行更深入的思考：\n\n${thinkingContext}`,
+    });
+  }
+
+  // Add the current user message with thinking instruction
+  const lastUserMessage = originalMessages[originalMessages.length - 1];
+  messages.push({
+    role: 'user',
+    content: `[正在进行第${currentRound}轮思考] 请对以下问题进行深入分析和思考，展示你的推理过程：\n\n${lastUserMessage.content}`,
+  });
+
+  return messages;
+}
+
+// Build messages for the final summary
+function buildSummaryMessages(
+  originalMessages: ChatMessageInput[],
+  thinkingHistory: string[],
+): ChatMessageInput[] {
+  const messages: ChatMessageInput[] = [];
+
+  // Add original messages (excluding the last user message)
+  for (let i = 0; i < originalMessages.length - 1; i++) {
+    messages.push(originalMessages[i]);
+  }
+
+  // Add thinking results as context
+  const thinkingContext = thinkingHistory
+    .map((content, index) => `【第${index + 1}轮思考】\n${content}`)
+    .join('\n\n');
+
+  messages.push({
+    role: 'system',
+    content: `以下是多轮思考的结果，请基于这些思考给出最终的完整回答：\n\n${thinkingContext}`,
+  });
+
+  // Add the original user message
+  const lastUserMessage = originalMessages[originalMessages.length - 1];
+  messages.push(lastUserMessage);
+
+  return messages;
 }
 
 async function handleCancelStream(message: any): Promise<unknown> {

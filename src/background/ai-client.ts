@@ -104,6 +104,85 @@ export async function streamChatCompletion({
 }
 
 /**
+ * Send a single thinking round request to an OpenAI-compatible API.
+ * Returns the full thinking content for this round.
+ */
+export async function streamThinkingRound({
+  baseUrl,
+  apiKey,
+  model,
+  messages,
+  maxTokens = 4096,
+  temperature = 0.7,
+  onChunk,
+  abortSignal,
+}: Omit<StreamChatOptions, 'onEnd' | 'onError'>): Promise<string> {
+  const url = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+  let fullContent = '';
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: maxTokens,
+      temperature,
+      stream: true,
+    }),
+    signal: abortSignal,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`API error (${response.status}): ${errorBody}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Response body is not readable');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+      const data = trimmed.slice(6);
+      if (data === '[DONE]') {
+        return fullContent;
+      }
+
+      try {
+        const parsed = JSON.parse(data);
+        const content = parsed.choices?.[0]?.delta?.content;
+        if (content) {
+          fullContent += content;
+          onChunk(content);
+        }
+      } catch {
+        // Skip malformed JSON lines
+      }
+    }
+  }
+
+  return fullContent;
+}
+
+/**
  * Test connection to an OpenAI-compatible API.
  * Sends a minimal completion request and returns success/failure.
  */
