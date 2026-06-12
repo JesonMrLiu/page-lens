@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { conversationRepo, messageRepo } from '@/db/repositories/conversation.repo';
+import { normalizePageUrl } from '@/shared/utils';
+import { MSG_TYPES } from '@/shared/constants';
 import type { Conversation, Message, ThinkMode, ThinkingProcess } from '@/shared/types';
 
 interface ChatState {
@@ -13,10 +15,13 @@ interface ChatState {
   thinkingProcess: ThinkingProcess[];
   isThinking: boolean;
   currentThinkRound: number;
+  // Page context for conversation isolation
+  currentPageUrl: string | null;
+  currentPageTitle: string | null;
 
   // Actions
   loadConversations: () => void;
-  createConversation: (title?: string, modelConfigId?: number) => Promise<Conversation>;
+  createConversation: (title?: string, modelConfigId?: number, pageUrl?: string, pageTitle?: string) => Promise<Conversation>;
   selectConversation: (id: number) => void;
   setModel: (modelId: number) => void;
   setThinkMode: (mode: ThinkMode) => void;
@@ -31,6 +36,9 @@ interface ChatState {
   endThinking: () => void;
   deleteConversation: (id: number) => Promise<void>;
   clearCurrentChat: () => void;
+  // Page context actions
+  setPageContext: (url: string, title: string) => void;
+  getConversationsForCurrentPage: () => Conversation[];
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -44,14 +52,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   thinkingProcess: [],
   isThinking: false,
   currentThinkRound: 0,
+  currentPageUrl: null,
+  currentPageTitle: null,
 
   loadConversations: () => {
     const conversations = conversationRepo.getAll();
     set({ conversations });
   },
 
-  createConversation: async (title?: string, modelConfigId?: number) => {
-    const conversation = await conversationRepo.create(title, modelConfigId);
+  createConversation: async (title?: string, modelConfigId?: number, pageUrl?: string, pageTitle?: string) => {
+    const conversation = await conversationRepo.create(title, modelConfigId, pageUrl, pageTitle);
     set((state) => ({
       conversations: [conversation, ...state.conversations],
       currentConversationId: conversation.id,
@@ -155,7 +165,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const existingIndex = state.thinkingProcess.findIndex((p) => p.round === round);
       if (existingIndex >= 0) {
-        // Update existing round content
         const updated = [...state.thinkingProcess];
         updated[existingIndex] = {
           ...updated[existingIndex],
@@ -163,7 +172,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
         return { thinkingProcess: updated };
       } else {
-        // Add new round
         return {
           thinkingProcess: [
             ...state.thinkingProcess,
@@ -178,7 +186,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const existingIndex = state.thinkingProcess.findIndex((p) => p.round === round);
       if (existingIndex >= 0) {
-        // Update existing round with full content
         const updated = [...state.thinkingProcess];
         updated[existingIndex] = { round, content: fullContent, isThinking: true };
         return {
@@ -186,7 +193,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           currentThinkRound: round + 1,
         };
       } else {
-        // Add completed round
         return {
           thinkingProcess: [
             ...state.thinkingProcess,
@@ -223,5 +229,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isThinking: false,
       currentThinkRound: 0,
     });
+  },
+
+  setPageContext: (url: string, title: string) => {
+    const normalizedUrl = normalizePageUrl(url);
+    const { currentPageUrl, isStreaming, currentConversationId } = get();
+
+    // Same page — no change needed
+    if (normalizedUrl === currentPageUrl) return;
+
+    // Cancel active stream when switching pages
+    if (isStreaming && currentConversationId) {
+      chrome.runtime.sendMessage({
+        type: MSG_TYPES.CANCEL_STREAM,
+        conversationId: currentConversationId,
+      });
+    }
+
+    // Update page context and reload conversations for this page
+    const pageConversations = conversationRepo.getByPageUrl(normalizedUrl);
+
+    if (pageConversations.length > 0) {
+      // Auto-select the most recent conversation for this page
+      const latest = pageConversations[0];
+      const messages = messageRepo.getByConversationId(latest.id);
+      set({
+        currentPageUrl: normalizedUrl,
+        currentPageTitle: title,
+        currentConversationId: latest.id,
+        messages,
+        streamingContent: '',
+        isStreaming: false,
+      });
+    } else {
+      // No conversations for this page — show empty state
+      set({
+        currentPageUrl: normalizedUrl,
+        currentPageTitle: title,
+        currentConversationId: null,
+        messages: [],
+        streamingContent: '',
+        isStreaming: false,
+      });
+    }
+  },
+
+  getConversationsForCurrentPage: () => {
+    const { conversations, currentPageUrl } = get();
+    if (!currentPageUrl) {
+      // No page context — show conversations without page_url (legacy/global)
+      return conversations.filter((c) => !c.page_url);
+    }
+    return conversations.filter(
+      (c) => normalizePageUrl(c.page_url) === currentPageUrl,
+    );
   },
 }));

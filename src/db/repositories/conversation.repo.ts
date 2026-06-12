@@ -1,5 +1,6 @@
 import { getDb, saveDatabase, getNextId } from '../database';
 import type { Conversation, Message, ThinkingProcess } from '@/shared/types';
+import { normalizePageUrl } from '@/shared/utils';
 
 function now(): string {
   return new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
@@ -53,6 +54,12 @@ export const conversationRepo = {
     db.conversations = db.conversations.filter(c => c.id !== id);
     db.messages = db.messages.filter(m => m.conversation_id !== id);
     await saveDatabase();
+  },
+
+  getByPageUrl(normalizedUrl: string): Conversation[] {
+    return getDb().conversations
+      .filter(c => normalizePageUrl(c.page_url) === normalizedUrl)
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
   },
 };
 

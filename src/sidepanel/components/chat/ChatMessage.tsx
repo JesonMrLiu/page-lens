@@ -1,5 +1,5 @@
 import { Bot, User, Copy, Check, Bookmark } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { Message } from '@/shared/types';
 import { formatDate } from '@/shared/utils';
 import { noteRepo } from '@/db/repositories/note.repo';
@@ -14,7 +14,9 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
-  const [saved, setSaved] = useState(false);
+  // Check if a note already exists for this message on mount
+  const initialSaved = useMemo(() => noteRepo.getByMessageId(message.id) !== null, [message.id]);
+  const [saved, setSaved] = useState(initialSaved);
   const { showToast } = useToast();
   const isUser = message.role === 'user';
 
@@ -25,6 +27,10 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
   };
 
   const handleSaveAsNote = async () => {
+    if (saved) {
+      showToast('info', '该消息已保存为笔记');
+      return;
+    }
     try {
       const title = conversationTitle || message.content.slice(0, 30) + '...';
       await noteRepo.create({
@@ -32,10 +38,10 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
         content: message.content,
         source_type: 'chat',
         conversation_id: message.conversation_id,
+        message_id: message.id,
       });
       setSaved(true);
       showToast('success', '已保存为笔记');
-      setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       console.error('[PageLens] Failed to save note:', err);
       showToast('error', '保存失败');

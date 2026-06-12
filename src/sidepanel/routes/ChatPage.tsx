@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Plus, MessageSquare } from 'lucide-react';
+import { Plus, MessageSquare, Globe } from 'lucide-react';
 import { ModelSelector } from '@/sidepanel/components/chat/ModelSelector';
 import { ChatMessageList } from '@/sidepanel/components/chat/ChatMessageList';
 import { ChatInput } from '@/sidepanel/components/chat/ChatInput';
@@ -10,6 +10,7 @@ import { useModels } from '@/sidepanel/hooks/useModels';
 import { modelConfigRepo } from '@/db/repositories/model-config.repo';
 import { useToast } from '@/sidepanel/components/shared/Toast';
 import { MSG_TYPES } from '@/shared/constants';
+import { extractDomain } from '@/shared/utils';
 import type { ThinkMode } from '@/shared/types';
 
 export function ChatPage() {
@@ -19,6 +20,8 @@ export function ChatPage() {
   const [sending, setSending] = useState(false);
   const [thinkMode, setThinkMode] = useState<ThinkMode>('none');
   const pageContextRef = useRef<{ url: string; content: string } | null>(null);
+  const tabListenerRegistered = useRef(false);
+  const currentWindowId = useRef<number | null>(null);
 
   // Set default model on mount
   useEffect(() => {
@@ -29,6 +32,72 @@ export function ChatPage() {
       }
     }
   }, [models, chat.selectedModelId, chat.setModel]);
+
+  // Get current window ID on mount (WINDOW_ID_CURRENT is a sentinel value, not the real ID)
+  useEffect(() => {
+    chrome.windows.getCurrent().then((win) => {
+      currentWindowId.current = win.id ?? null;
+    });
+  }, []);
+
+  // Detect initial page URL on mount
+  useEffect(() => {
+    const detectInitialPage = async () => {
+      try {
+        const tabResponse = await chrome.runtime.sendMessage({
+          type: MSG_TYPES.GET_ACTIVE_TAB,
+        });
+        if (tabResponse?.url && (tabResponse.url.startsWith('http://') || tabResponse.url.startsWith('https://'))) {
+          chat.setPageContext(tabResponse.url, tabResponse.title || '');
+        }
+      } catch {
+        // Silently ignore — page context is optional
+      }
+    };
+    detectInitialPage();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for tab URL changes (page navigation, tab switching)
+  useEffect(() => {
+    if (tabListenerRegistered.current) return;
+    tabListenerRegistered.current = true;
+
+    const handleTabUpdated = (
+      _tabId: number,
+      changeInfo: chrome.tabs.TabChangeInfo,
+      tab: chrome.tabs.Tab,
+    ) => {
+      // Only react to URL changes in active tabs within our window
+      if (changeInfo.url && tab.active && tab.windowId === currentWindowId.current) {
+        const url = changeInfo.url;
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          chat.setPageContext(url, tab.title || '');
+        }
+      }
+    };
+
+    const handleTabActivated = async (activeInfo: chrome.tabs.TabActiveInfo) => {
+      // Only react to activation in our window
+      if (activeInfo.windowId !== currentWindowId.current) return;
+      try {
+        const tab = await chrome.tabs.get(activeInfo.tabId);
+        if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
+          chat.setPageContext(tab.url, tab.title || '');
+        }
+      } catch {
+        // Tab may not be accessible
+      }
+    };
+
+    chrome.tabs.onUpdated.addListener(handleTabUpdated);
+    chrome.tabs.onActivated.addListener(handleTabActivated);
+
+    return () => {
+      chrome.tabs.onUpdated.removeListener(handleTabUpdated);
+      chrome.tabs.onActivated.removeListener(handleTabActivated);
+      tabListenerRegistered.current = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = useCallback(async (content: string) => {
     setSending(true);
@@ -79,20 +148,29 @@ export function ChatPage() {
 
   const hasMessages = chat.messages.length > 0 || chat.isStreaming;
   const hasModels = models.length > 0;
+  const pageDomain = chat.currentPageUrl ? extractDomain(chat.currentPageUrl) : null;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Top bar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-white shrink-0">
-        <ModelSelector
-          models={models}
-          selectedId={chat.selectedModelId}
-          onSelect={chat.setModel}
-          disabled={chat.isStreaming}
-        />
+        <div className="flex items-center gap-2 min-w-0">
+          <ModelSelector
+            models={models}
+            selectedId={chat.selectedModelId}
+            onSelect={chat.setModel}
+            disabled={chat.isStreaming}
+          />
+          {pageDomain && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-gray-400 bg-gray-50 rounded shrink-0" title={chat.currentPageUrl ?? ''}>
+              <Globe size={10} />
+              {pageDomain}
+            </span>
+          )}
+        </div>
         <button
           onClick={handleNewChat}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors shrink-0"
           title="新对话"
         >
           <Plus size={14} />

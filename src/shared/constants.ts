@@ -51,8 +51,8 @@ export const MAX_PAGE_CONTENT_LENGTH = 15000;
 export const PROMPTS = {
   summarize: (language: string = 'zh') => {
     return language === 'zh'
-      ? '请总结当前页面内容，包含核心摘要和关键要点。如涉及流程、架构或因果关系，请用 Mermaid 图表可视化说明。'
-      : 'Please summarize the current page content, including a core summary and key points. If it involves processes, architecture, or causal relationships, use Mermaid diagrams for visual explanation.';
+      ? '请总结当前页面内容，包含核心摘要和关键要点。'
+      : 'Please summarize the current page content, including a core summary and key points.';
   },
   translateToZh: () => {
     return '请将当前页面的内容翻译为中文，保持原有格式。';

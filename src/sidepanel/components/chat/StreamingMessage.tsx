@@ -39,7 +39,6 @@ export function StreamingMessage({
           {content ? (
             <MarkdownRenderer
               content={content}
-              isStreaming={true}
               className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:text-primary-700 prose-code:bg-primary-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none"
             />
           ) : null}

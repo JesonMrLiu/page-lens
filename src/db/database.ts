@@ -46,6 +46,12 @@ export async function initDatabase(): Promise<AppData> {
     if (!Array.isArray(cachedData.messages)) cachedData.messages = [];
     if (!Array.isArray(cachedData.notes)) cachedData.notes = [];
     if (!cachedData.nextId) cachedData.nextId = 1;
+    // 迁移 notes：为旧数据补充 message_id 字段
+    if (Array.isArray(cachedData.notes)) {
+      for (const note of cachedData.notes) {
+        if (note.message_id === undefined) note.message_id = null;
+      }
+    }
   } else {
     cachedData = getDefaultData();
     await saveDatabase();

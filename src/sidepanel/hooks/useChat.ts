@@ -47,6 +47,8 @@ export function useChat() {
       const conv = await store.createConversation(
         content.slice(0, 50) + (content.length > 50 ? '...' : ''),
         model.id,
+        store.currentPageUrl ?? undefined,
+        store.currentPageTitle ?? undefined,
       );
       convId = conv.id;
       store.setModel(model.id);

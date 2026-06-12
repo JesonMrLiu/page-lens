@@ -92,6 +92,7 @@ export interface Note {
   source_url: string;
   source_type: 'chat' | 'summary' | 'translation' | 'manual';
   conversation_id: number | null;
+  message_id: number | null;
   feishu_doc_id: string;
   feishu_doc_url: string;
   tags: string;

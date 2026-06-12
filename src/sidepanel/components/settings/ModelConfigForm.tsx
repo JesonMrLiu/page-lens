@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Trash2, Star } from 'lucide-react';
 import { Button } from '@/sidepanel/components/shared/Button';
 import type { ModelConfig, CreateModelConfig } from '@/shared/types';
 import { DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE } from '@/shared/constants';
+import {
+  PRESET_PROVIDERS,
+  getPresetById,
+  matchPresetByUrl,
+  isLocalProvider,
+} from '@/shared/preset-models';
 
 interface ModelConfigFormProps {
   model?: ModelConfig | null;
@@ -14,16 +20,46 @@ interface ModelConfigFormProps {
 }
 
 export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest, onCancel }: ModelConfigFormProps) {
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(
+    model ? matchPresetByUrl(model.base_url) : 'openai'
+  );
   const [name, setName] = useState(model?.name ?? '');
   const [baseUrl, setBaseUrl] = useState(model?.base_url ?? 'https://api.openai.com');
   const [apiKey, setApiKey] = useState(model?.api_key ?? '');
-  const [modelId, setModelId] = useState(model?.model_id ?? 'gpt-4o');
+  const [modelId, setModelId] = useState(model?.model_id ?? 'gpt-5.5');
+  const [useCustomModelId, setUseCustomModelId] = useState(false);
   const [maxTokens, setMaxTokens] = useState(model?.max_tokens ?? DEFAULT_MAX_TOKENS);
   const [temperature, setTemperature] = useState(model?.temperature ?? DEFAULT_TEMPERATURE);
   const [showApiKey, setShowApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // When editing, check if the existing model_id is in the preset's available_models
+  useEffect(() => {
+    if (model && selectedPresetId !== 'custom') {
+      const preset = getPresetById(selectedPresetId);
+      if (preset && !preset.available_models.includes(model.model_id)) {
+        setUseCustomModelId(true);
+      }
+    }
+  }, []);
+
+  const handlePresetChange = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    setUseCustomModelId(false);
+
+    if (presetId === 'custom') return;
+
+    const preset = getPresetById(presetId);
+    if (!preset) return;
+
+    setName((prev) => prev || preset.name);
+    setBaseUrl(preset.base_url);
+    setModelId(preset.default_model_id);
+    setMaxTokens(preset.max_tokens);
+    setTemperature(preset.temperature);
+  };
 
   const handleTest = async () => {
     setTesting(true);
@@ -45,7 +81,8 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !baseUrl.trim() || !apiKey.trim() || !modelId.trim()) return;
+    const localRequired = isLocalProvider(baseUrl);
+    if (!name.trim() || !baseUrl.trim() || (!localRequired && !apiKey.trim()) || !modelId.trim()) return;
 
     setSaving(true);
     try {
@@ -75,17 +112,37 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
     }
   };
 
-  const isValid = name.trim() && baseUrl.trim() && apiKey.trim() && modelId.trim();
+  const localProvider = isLocalProvider(baseUrl);
+  const isValid = name.trim() && baseUrl.trim() && (localProvider || apiKey.trim()) && modelId.trim();
+  const currentPreset = getPresetById(selectedPresetId);
+  const showModelDropdown = selectedPresetId !== 'custom' && currentPreset && currentPreset.available_models.length > 0;
 
   return (
     <div className="space-y-3">
+      {/* Provider selector */}
+      <div>
+        <label className="block text-xs text-gray-600 mb-1">服务提供商</label>
+        <select
+          className="input-field"
+          value={selectedPresetId}
+          onChange={(e) => handlePresetChange(e.target.value)}
+        >
+          {PRESET_PROVIDERS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+
       {/* Name */}
       <div>
         <label className="block text-xs text-gray-600 mb-1">名称</label>
         <input
           type="text"
           className="input-field"
-          placeholder="例如：GPT-4o"
+          placeholder="例如：DeepseekAI"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
@@ -106,12 +163,14 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
 
       {/* API Key */}
       <div>
-        <label className="block text-xs text-gray-600 mb-1">API Key</label>
+        <label className="block text-xs text-gray-600 mb-1">
+          API Key{localProvider && <span className="text-gray-400 ml-1">(本地服务可不填)</span>}
+        </label>
         <div className="relative">
           <input
             type={showApiKey ? 'text' : 'password'}
             className="input-field pr-8"
-            placeholder="sk-..."
+            placeholder={localProvider ? '本地服务无需 API Key' : 'sk-...'}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
           />
@@ -125,16 +184,54 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
         </div>
       </div>
 
-      {/* Model ID */}
+      {/* Model ID - dropdown + custom input */}
       <div>
         <label className="block text-xs text-gray-600 mb-1">模型 ID</label>
-        <input
-          type="text"
-          className="input-field"
-          placeholder="gpt-4o"
-          value={modelId}
-          onChange={(e) => setModelId(e.target.value)}
-        />
+        {showModelDropdown && !useCustomModelId ? (
+          <div className="space-y-1.5">
+            <select
+              className="input-field"
+              value={modelId}
+              onChange={(e) => {
+                if (e.target.value === '__custom__') {
+                  setUseCustomModelId(true);
+                  setModelId('');
+                } else {
+                  setModelId(e.target.value);
+                }
+              }}
+            >
+              {currentPreset!.available_models.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+              <option value="__custom__">自定义模型...</option>
+            </select>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <input
+              type="text"
+              className="input-field"
+              placeholder="输入模型 ID"
+              value={modelId}
+              onChange={(e) => setModelId(e.target.value)}
+            />
+            {showModelDropdown && useCustomModelId && (
+              <button
+                type="button"
+                className="text-[10px] text-primary-500 hover:text-primary-600"
+                onClick={() => {
+                  setUseCustomModelId(false);
+                  setModelId(currentPreset!.default_model_id);
+                }}
+              >
+                ← 返回预置模型列表
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Max Tokens & Temperature */}

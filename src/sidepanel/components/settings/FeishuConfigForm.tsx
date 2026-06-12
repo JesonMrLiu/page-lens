@@ -34,7 +34,7 @@ export function FeishuConfigForm() {
     setTestResult({
       success: result.success,
       message: result.success
-        ? (folderToken.trim() ? '连接成功！应用凭证和文件夹权限验证通过。' : '连接成功！飞书应用配置正确。')
+        ? (folderToken.trim() ? '连接成功！应用凭证和文件夹权限验证通过。' : '连接成功！飞书应用认证通过。')
         : (result.error ?? '连接失败'),
     });
     setTesting(false);
@@ -122,6 +122,9 @@ export function FeishuConfigForm() {
           导出的文档将保存到此文件夹。需要同时满足：
           应用已开通 <code className="text-[10px] bg-gray-100 px-0.5 rounded">drive:drive</code> 和 <code className="text-[10px] bg-gray-100 px-0.5 rounded">docx:document</code> 权限，且应用已被添加为该文件夹的协作者。
         </p>
+        <p className="text-[10px] text-primary-500 mt-0.5">
+          提示：如果测试连接失败，可先清空文件夹 Token 单独测试认证是否通过。
+        </p>
       </div>
 
       {/* Test result */}
@@ -130,7 +133,7 @@ export function FeishuConfigForm() {
           testResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
         }`}>
           {testResult.success ? <CheckCircle size={14} className="shrink-0 mt-0.5" /> : <AlertCircle size={14} className="shrink-0 mt-0.5" />}
-          {testResult.message}
+          <span className="whitespace-pre-wrap">{testResult.message}</span>
         </div>
       )}
 

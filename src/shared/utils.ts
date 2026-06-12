@@ -48,6 +48,34 @@ export function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Normalize a page URL for consistent comparison.
+ * Strips query params, hash, and trailing slashes.
+ */
+export function normalizePageUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    let normalized = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    if (normalized.length > 1 && normalized.endsWith('/')) {
+      normalized = normalized.slice(0, -1);
+    }
+    return normalized;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Extract the domain from a URL for display purposes.
+ */
+export function extractDomain(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Check if current URL is a valid page for extraction
  */
 export function isValidPageUrl(url: string): boolean {

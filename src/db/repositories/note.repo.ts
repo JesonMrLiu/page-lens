@@ -22,12 +22,17 @@ export const noteRepo = {
     return getDb().notes.find(n => n.id === id) ?? null;
   },
 
+  getByMessageId(messageId: number): Note | null {
+    return getDb().notes.find(n => n.message_id === messageId) ?? null;
+  },
+
   async create(note: {
     title: string;
     content: string;
     source_url?: string;
     source_type?: Note['source_type'];
     conversation_id?: number;
+    message_id?: number;
     tags?: string;
   }): Promise<Note> {
     const item: Note = {
@@ -37,6 +42,7 @@ export const noteRepo = {
       source_url: note.source_url ?? '',
       source_type: note.source_type ?? 'chat',
       conversation_id: note.conversation_id ?? null,
+      message_id: note.message_id ?? null,
       feishu_doc_id: '',
       feishu_doc_url: '',
       tags: note.tags ?? '',
