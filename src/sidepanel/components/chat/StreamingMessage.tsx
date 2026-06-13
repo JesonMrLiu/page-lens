@@ -37,13 +37,36 @@ export function StreamingMessage({
         {/* Main content */}
         <div className="inline-block max-w-[90%] rounded-xl rounded-bl-sm px-3 py-2 text-sm leading-relaxed bg-white border border-gray-200 text-gray-800">
           {content ? (
-            <MarkdownRenderer
-              content={content}
-              className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:text-primary-700 prose-code:bg-primary-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none"
-            />
-          ) : null}
-          {/* Blinking cursor */}
-          <span className="inline-block w-1.5 h-4 bg-primary-600 animate-pulse rounded-sm align-text-bottom ml-0.5" />
+            <>
+              <MarkdownRenderer
+                content={content}
+                className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:text-primary-700 prose-code:bg-primary-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none"
+              />
+              {/* Blinking cursor（内容输出中） */}
+              <span className="inline-block w-1.5 h-4 bg-primary-600 animate-pulse rounded-sm align-text-bottom ml-0.5" />
+            </>
+          ) : (
+            /* 3 个跳动圆点（AI 思考中） */
+            <div className="flex items-center gap-1 py-1">
+              <style>{`
+                @keyframes dotBounce {
+                  0%, 80%, 100% { transform: translateY(0); }
+                  40% { transform: translateY(-6px); }
+                }
+                .dot-bounce {
+                  width: 6px;
+                  height: 6px;
+                  border-radius: 50%;
+                  background-color: #9ca3af;
+                  display: inline-block;
+                  animation: dotBounce 1.4s ease-in-out infinite;
+                }
+              `}</style>
+              <span className="dot-bounce" />
+              <span className="dot-bounce" style={{ animationDelay: '0.15s' }} />
+              <span className="dot-bounce" style={{ animationDelay: '0.3s' }} />
+            </div>
+          )}
         </div>
       </div>
     </div>

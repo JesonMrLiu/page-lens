@@ -128,9 +128,7 @@ export function ChatPage() {
         // 提取失败时静默忽略，消息照常发送
       }
 
-      // Set think mode in store before sending
-      chat.setThinkMode(thinkMode);
-      await chat.sendMessage(content, pageContext);
+      await chat.sendMessage(content, pageContext, thinkMode);
     } catch (err: any) {
       showToast('error', err.message || '发送失败');
     } finally {

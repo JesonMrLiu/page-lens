@@ -29,8 +29,9 @@ export function useChat() {
     });
   }, []);
 
-  const sendMessage = useCallback(async (content: string, pageContext?: string | null) => {
-    const { currentConversationId, selectedModelId, thinkMode } = store;
+  const sendMessage = useCallback(async (content: string, pageContext?: string | null, thinkModeOverride?: ThinkMode) => {
+    const { currentConversationId, selectedModelId } = store;
+    const thinkMode = thinkModeOverride ?? store.thinkMode;
 
     // Get model config
     const model = selectedModelId
@@ -128,6 +129,10 @@ export function useChat() {
 
           case 'THINK_STREAM_ROUND_END':
             store.endThinkRound(message.round, message.fullContent);
+            break;
+
+          case 'THINK_STREAM_END':
+            store.endThinking();
             break;
 
           case MSG_TYPES.CHAT_STREAM_END:

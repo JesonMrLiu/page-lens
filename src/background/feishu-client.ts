@@ -203,21 +203,33 @@ export async function createFeishuDocument(
 
   const docId = createData.data.document.document_id;
 
-  // 2. Add content blocks
+  // 2. Add content blocks (batched: Feishu allows at most 50 blocks per request)
   const blocks = markdownToFeishuBlocks(content);
   if (blocks.length > 0) {
-    const blocksUrl = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${docId}/children`;
-    await fetch(blocksUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ children: blocks }),
-    });
+    const blocksUrl = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${docId}/children?document_revision_id=-1`;
+    const BATCH_SIZE = 50;
+    for (let offset = 0; offset < blocks.length; offset += BATCH_SIZE) {
+      const batch = blocks.slice(offset, offset + BATCH_SIZE);
+      const blocksResponse = await fetch(blocksUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ children: batch, index: offset }),
+      });
+      const blocksData: any = await safeParseJSON(blocksResponse, blocksUrl);
+      if (blocksData.code !== 0) {
+        // 99992402 = field validation failed，是请求体格式问题（块结构非法），与权限无关
+        const hint = blocksData.code === 99992402
+          ? '内容块格式校验失败，可能包含暂不支持的内容格式，请反馈该笔记内容以便排查。'
+          : '请检查应用是否已开通「创建及编辑新版文档」(docx:document) 权限。';
+        throw new Error(`文档已创建，但写入正文失败（错误码 ${blocksData.code}：${blocksData.msg || '未知错误'}）。${hint}`);
+      }
+    }
   }
 
-  const docUrl = `https://bytedance.larkoffice.com/docx/${docId}`;
+  const docUrl = `https://www.feishu.cn/docx/${docId}`;
   return { docId, docUrl };
 }
 
@@ -271,7 +283,7 @@ function markdownToFeishuBlocks(markdown: string): any[] {
     }
     // Divider
     else if (line.trim() === '---') {
-      blocks.push({ block_type: 22 }); // divider
+      blocks.push({ block_type: 22, divider: {} }); // divider（divider 字段必填，缺失会触发字段校验失败）
     }
     // Empty line - skip
     else if (line.trim() === '') {
@@ -307,9 +319,10 @@ function createParagraph(text: string): any {
 
 function createHeading(text: string, level: number): any {
   // block_type: 3=heading1, 4=heading2, 5=heading3
+  // 注意：字段名必须与块类型对应（heading1/heading2/heading3），否则整个写入请求会失败
   return {
     block_type: level + 2,
-    heading: {
+    [`heading${level}`]: {
       elements: [createTextElement(text)],
       style: {},
     },
@@ -318,7 +331,7 @@ function createHeading(text: string, level: number): any {
 
 function createBulletItem(text: string): any {
   return {
-    block_type: 16, // bullet
+    block_type: 12, // bullet
     bullet: {
       elements: [createTextElement(text)],
       style: {},
@@ -328,7 +341,7 @@ function createBulletItem(text: string): any {
 
 function createOrderedItem(text: string): any {
   return {
-    block_type: 17, // ordered
+    block_type: 13, // ordered
     ordered: {
       elements: [createTextElement(text)],
       style: {},
@@ -338,7 +351,7 @@ function createOrderedItem(text: string): any {
 
 function createQuote(text: string): any {
   return {
-    block_type: 18, // quote
+    block_type: 15, // quote
     quote: {
       elements: [createTextElement(text)],
       style: {},

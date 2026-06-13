@@ -1,7 +1,8 @@
-import { ExternalLink, Trash2, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { ExternalLink, Trash2, FileText, Link } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import type { Note } from '@/shared/types';
-import { formatDate, truncateText } from '@/shared/utils';
+import { formatDate, truncateText, extractDomain } from '@/shared/utils';
+import { getEffectiveSourceUrl } from '@/db/repositories/note.repo';
 
 interface NoteCardProps {
   note: Note;
@@ -21,6 +22,8 @@ export function NoteCard({ note, onClick, onDelete, onExportToFeishu }: NoteCard
   const [deleting, setDeleting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const typeInfo = sourceTypeLabels[note.source_type] ?? sourceTypeLabels.manual;
+  // 来源 URL（旧笔记回退到所属对话的 page_url）
+  const sourceUrl = useMemo(() => getEffectiveSourceUrl(note), [note]);
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,7 +59,22 @@ export function NoteCard({ note, onClick, onDelete, onExportToFeishu }: NoteCard
           </div>
           <h4 className="text-sm font-medium text-gray-800 truncate">{note.title}</h4>
           <p className="text-xs text-gray-500 mt-1 line-clamp-2">{truncateText(note.content, 100)}</p>
-          <div className="text-[10px] text-gray-400 mt-2">{formatDate(note.created_at)}</div>
+          <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-2">
+            <span>{formatDate(note.created_at)}</span>
+            {sourceUrl && (
+              <a
+                href={sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-0.5 text-primary-600 hover:underline truncate max-w-[140px]"
+                title={sourceUrl}
+              >
+                <Link size={10} className="shrink-0" />
+                {extractDomain(sourceUrl)}
+              </a>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
           {!note.feishu_doc_url && (

@@ -17,7 +17,7 @@ export const PRESET_PROVIDERS: PresetModelProvider[] = [
   {
     id: 'deepseek',
     name: 'DeepseekAI',
-    base_url: 'https://api.deepseek.com',
+    base_url: 'https://api.deepseek.com/v1',
     default_model_id: 'deepseek-v4-flash',
     available_models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
     max_tokens: 4096,
@@ -26,7 +26,7 @@ export const PRESET_PROVIDERS: PresetModelProvider[] = [
   {
     id: 'openai',
     name: 'OpenAI',
-    base_url: 'https://api.openai.com',
+    base_url: 'https://api.openai.com/v1',
     default_model_id: 'gpt-5.5',
     available_models: ['gpt-5.5'],
     max_tokens: 4096,

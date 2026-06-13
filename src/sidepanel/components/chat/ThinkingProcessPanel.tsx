@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Brain, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import type { ThinkingProcess } from '@/shared/types';
-import { MarkdownRenderer } from '@/sidepanel/components/shared/MarkdownRenderer';
 
 interface ThinkingProcessPanelProps {
   processes: ThinkingProcess[];
@@ -15,11 +14,21 @@ export function ThinkingProcessPanel({
   currentRound,
 }: ThinkingProcessPanelProps) {
   const [expanded, setExpanded] = useState(false);
+  const wasThinkingRef = useRef(false);
 
-  // 思考开始或有新内容时自动展开
+  // 思考开始时自动展开
   useEffect(() => {
-    if (isThinking || processes.length > 0) {
+    if (isThinking) {
       setExpanded(true);
+      wasThinkingRef.current = true;
+    }
+  }, [isThinking]);
+
+  // 思考结束时自动收起
+  useEffect(() => {
+    if (wasThinkingRef.current && !isThinking && processes.length > 0) {
+      setExpanded(false);
+      wasThinkingRef.current = false;
     }
   }, [isThinking, processes.length]);
 
@@ -53,20 +62,17 @@ export function ThinkingProcessPanel({
             <div key={index} className="relative">
               {/* Round indicator */}
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-medium">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-100 text-purple-600 text-[10px] font-medium">
                   {process.round}
                 </span>
-                <span className="text-xs text-gray-400">
+                <span className="text-[10px] text-gray-400">
                   第{process.round}轮思考
                 </span>
               </div>
 
-              {/* Content */}
-              <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-2">
-                <MarkdownRenderer
-                  content={process.content}
-                  className="prose prose-xs max-w-none prose-p:my-0.5 prose-headings:my-1 prose-pre:my-1 prose-ul:my-0.5 prose-ol:my-0.5 prose-li:my-0.25"
-                />
+              {/* Content — 纯文本，小字号，淡色，与正文明确区分 */}
+              <div className="text-xs leading-relaxed text-gray-400 italic bg-purple-50/50 rounded-lg p-2">
+                <p className="whitespace-pre-wrap break-words">{process.content}</p>
               </div>
             </div>
           ))}

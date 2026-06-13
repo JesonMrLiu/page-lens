@@ -1,7 +1,7 @@
 import { MSG_TYPES } from '@/shared/constants';
 import type { ExtensionMessage } from '@/shared/messages';
 import type { ChatMessageInput } from '@/shared/types';
-import { testConnection, streamChatCompletion, streamThinkingRound } from './ai-client';
+import { testConnection, streamChatCompletion, streamThinkingRound, chatCompletion } from './ai-client';
 import { testFeishuConnection, createFeishuDocument } from './feishu-client';
 import { extractFromActiveTab } from './page-extractor';
 
@@ -47,6 +47,12 @@ export function setupMessageRouter(): void {
 
         case MSG_TYPES.EXPORT_TO_FEISHU:
           handleExportToFeishu(message)
+            .then(sendResponse)
+            .catch((err) => sendResponse({ error: err.message }));
+          return true;
+
+        case MSG_TYPES.GENERATE_TITLE:
+          handleGenerateTitle(message)
             .then(sendResponse)
             .catch((err) => sendResponse({ error: err.message }));
           return true;
@@ -294,6 +300,12 @@ async function handleThinkingChat({
       });
     }
 
+    // 通知前端思考阶段结束，正文即将开始
+    sendToSender({
+      type: 'THINK_STREAM_END',
+      conversationId,
+    });
+
     // Final summary round
     if (abortController.signal.aborted) {
       return;
@@ -378,7 +390,16 @@ function buildThinkMessages(
   const lastUserMessage = originalMessages[originalMessages.length - 1];
   messages.push({
     role: 'user',
-    content: `[正在进行第${currentRound}轮思考] 请对以下问题进行深入分析和思考，展示你的推理过程：\n\n${lastUserMessage.content}`,
+    content: `你现在处于"思考阶段"（第${currentRound}轮），请仅对这个用户的原始问题进行推理分析，不要给出最终答案。要求：
+1. 分析问题的核心要点和关键信息
+2. 列出可能的解决思路或方案
+3. 评估每种方案的优缺点
+4. 推理出最佳解答路径
+
+注意：不要给出最终答案，只展示你的推理和思考过程。最终答案将在后续的"回答阶段"中给出。
+
+用户的原始问题：
+${lastUserMessage.content}`,
   });
 
   return messages;
@@ -403,7 +424,10 @@ function buildSummaryMessages(
 
   messages.push({
     role: 'system',
-    content: `以下是多轮思考的结果，请基于这些思考给出最终的完整回答：\n\n${thinkingContext}`,
+    content: `以下是针对用户问题的多轮思考推理过程，请基于这些推理给出一个完整、准确、有条理的最终回答。回答时不要重复思考过程，直接给出最终答案。
+
+思考推理过程：
+${thinkingContext}`,
   });
 
   // Add the original user message
@@ -466,6 +490,36 @@ async function handleExportToFeishu(message: any): Promise<unknown> {
       success: false,
       error: err.message || '导出失败',
     };
+  }
+}
+
+async function handleGenerateTitle(message: any): Promise<unknown> {
+  const { content, modelConfig } = message;
+  if (!content || !modelConfig) {
+    return { type: MSG_TYPES.GENERATE_TITLE_RESULT, success: false, error: '缺少内容或模型配置' };
+  }
+
+  try {
+    const title = await chatCompletion({
+      baseUrl: modelConfig.baseUrl,
+      apiKey: modelConfig.apiKey,
+      model: modelConfig.model,
+      messages: [
+        {
+          role: 'user',
+          content: `请为以下内容生成一个不超过20字的简洁中文标题，直接输出标题本身，不要引号和多余说明：\n\n${String(content).slice(0, 2000)}`,
+        },
+      ],
+      maxTokens: 100,
+      temperature: 0.3,
+    });
+    const cleaned = title.trim().replace(/^["'「『]+|["'」』]+$/g, '');
+    if (!cleaned) {
+      return { type: MSG_TYPES.GENERATE_TITLE_RESULT, success: false, error: 'AI 返回了空标题' };
+    }
+    return { type: MSG_TYPES.GENERATE_TITLE_RESULT, success: true, title: cleaned };
+  } catch (err: any) {
+    return { type: MSG_TYPES.GENERATE_TITLE_RESULT, success: false, error: err.message || '标题生成失败' };
   }
 }
 

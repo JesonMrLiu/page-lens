@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { noteRepo } from '@/db/repositories/note.repo';
+import { noteRepo, getEffectiveSourceUrl } from '@/db/repositories/note.repo';
 import { feishuConfigRepo } from '@/db/repositories/feishu-config.repo';
 import type { Note } from '@/shared/types';
 import { MSG_TYPES } from '@/shared/constants';
@@ -61,11 +61,17 @@ export function useNotes(): UseNotesReturn {
     }
 
     try {
+      // 导出内容开头附上原文链接（飞书侧渲染为引用块）
+      const sourceUrl = getEffectiveSourceUrl(note);
+      const exportContent = sourceUrl
+        ? `> 原文链接：${sourceUrl}\n\n${note.content}`
+        : note.content;
+
       const response = await chrome.runtime.sendMessage({
         type: MSG_TYPES.EXPORT_TO_FEISHU,
         noteId,
         title: note.title,
-        content: note.content,
+        content: exportContent,
         feishuConfig: {
           appId: feishuConfig.app_id,
           appSecret: feishuConfig.app_secret,

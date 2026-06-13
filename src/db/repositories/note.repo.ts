@@ -1,8 +1,21 @@
 import { getDb, saveDatabase, getNextId } from '../database';
+import { conversationRepo } from './conversation.repo';
 import type { Note } from '@/shared/types';
 
 function now(): string {
   return new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+}
+
+/**
+ * 获取笔记的来源网页 URL。
+ * 优先使用笔记自身的 source_url；旧笔记没有该字段时，回退到所属对话记录的 page_url。
+ */
+export function getEffectiveSourceUrl(note: Note): string {
+  if (note.source_url) return note.source_url;
+  if (note.conversation_id != null) {
+    return conversationRepo.getById(note.conversation_id)?.page_url || '';
+  }
+  return '';
 }
 
 export const noteRepo = {

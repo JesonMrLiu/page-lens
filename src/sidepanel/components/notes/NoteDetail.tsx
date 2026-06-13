@@ -1,7 +1,8 @@
 import { ArrowLeft, ExternalLink, Copy, Check, Trash2, FileText } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { Note } from '@/shared/types';
 import { formatDate } from '@/shared/utils';
+import { getEffectiveSourceUrl } from '@/db/repositories/note.repo';
 import { Button } from '@/sidepanel/components/shared/Button';
 import { MarkdownRenderer } from '@/sidepanel/components/shared/MarkdownRenderer';
 
@@ -22,6 +23,8 @@ const sourceTypeLabels: Record<Note['source_type'], string> = {
 export function NoteDetail({ note, onBack, onDelete, onExportToFeishu }: NoteDetailProps) {
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // 来源 URL（旧笔记回退到所属对话的 page_url）
+  const sourceUrl = useMemo(() => getEffectiveSourceUrl(note), [note]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(note.content);
@@ -49,9 +52,9 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu }: NoteDet
       <div className="px-4 py-2 border-b border-gray-100 bg-gray-50 flex items-center gap-3 text-[10px] text-gray-500 shrink-0">
         <span>{formatDate(note.created_at)}</span>
         <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200">{sourceTypeLabels[note.source_type]}</span>
-        {note.source_url && (
+        {sourceUrl && (
           <a
-            href={note.source_url}
+            href={sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-0.5 text-primary-600 hover:underline truncate"
@@ -64,6 +67,20 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu }: NoteDet
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
+        {/* 来源引用：在正文开头展示原文链接 */}
+        {sourceUrl && (
+          <blockquote className="mb-3 pl-3 border-l-2 border-primary-300 text-xs text-gray-500">
+            来源：
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary-600 hover:underline break-all"
+            >
+              {sourceUrl}
+            </a>
+          </blockquote>
+        )}
         <MarkdownRenderer
           content={note.content}
           className="prose prose-sm max-w-none prose-p:my-2 prose-headings:my-3 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1"

@@ -29,7 +29,7 @@ export async function streamChatCompletion({
   onError,
   abortSignal,
 }: StreamChatOptions): Promise<void> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
   try {
     const response = await fetch(url, {
@@ -117,7 +117,7 @@ export async function streamThinkingRound({
   onChunk,
   abortSignal,
 }: Omit<StreamChatOptions, 'onEnd' | 'onError'>): Promise<string> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
   let fullContent = '';
 
   const response = await fetch(url, {
@@ -183,6 +183,51 @@ export async function streamThinkingRound({
 }
 
 /**
+ * Send a non-streaming chat completion request to an OpenAI-compatible API.
+ * Returns the full response text. Used for short one-shot tasks like title generation.
+ */
+export async function chatCompletion({
+  baseUrl,
+  apiKey,
+  model,
+  messages,
+  maxTokens = 100,
+  temperature = 0.3,
+}: {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  messages: ChatMessageInput[];
+  maxTokens?: number;
+  temperature?: number;
+}): Promise<string> {
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: maxTokens,
+      temperature,
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`API error (${response.status}): ${errorBody}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+/**
  * Test connection to an OpenAI-compatible API.
  * Sends a minimal completion request and returns success/failure.
  */
@@ -191,7 +236,7 @@ export async function testConnection(
   apiKey: string,
   model: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
   try {
     const response = await fetch(url, {

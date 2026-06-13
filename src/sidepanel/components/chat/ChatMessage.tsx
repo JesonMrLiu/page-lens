@@ -3,13 +3,39 @@ import { useState, useMemo } from 'react';
 import type { Message } from '@/shared/types';
 import { formatDate } from '@/shared/utils';
 import { noteRepo } from '@/db/repositories/note.repo';
+import { conversationRepo } from '@/db/repositories/conversation.repo';
+import { modelConfigRepo } from '@/db/repositories/model-config.repo';
 import { useToast } from '@/sidepanel/components/shared/Toast';
 import { MarkdownRenderer } from '@/sidepanel/components/shared/MarkdownRenderer';
+import { MSG_TYPES } from '@/shared/constants';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 
 interface ChatMessageProps {
   message: Message;
   conversationTitle?: string;
+}
+
+/**
+ * 调用 background 用默认模型为内容生成简短标题。
+ * 失败（无模型/请求出错）时返回空字符串，由调用方兜底。
+ */
+async function generateTitleByAI(content: string): Promise<string> {
+  try {
+    const model = modelConfigRepo.getDefault();
+    if (!model) return '';
+    const response = await chrome.runtime.sendMessage({
+      type: MSG_TYPES.GENERATE_TITLE,
+      content,
+      modelConfig: {
+        baseUrl: model.base_url,
+        apiKey: model.api_key,
+        model: model.model_id,
+      },
+    });
+    return response?.success && response.title ? response.title : '';
+  } catch {
+    return '';
+  }
 }
 
 export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
@@ -32,10 +58,22 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
       return;
     }
     try {
-      const title = conversationTitle || message.content.slice(0, 30) + '...';
+      // 获取所属对话，拿到来源网页的标题和 URL
+      const conversation = conversationRepo.getById(message.conversation_id);
+
+      // 标题策略：网页标题优先 → AI 总结兜底 → 消息内容截取
+      let title = conversation?.page_title?.trim() || '';
+      if (!title) {
+        title = await generateTitleByAI(message.content);
+      }
+      if (!title) {
+        title = conversationTitle || message.content.slice(0, 30) + '...';
+      }
+
       await noteRepo.create({
         title,
         content: message.content,
+        source_url: conversation?.page_url || '',
         source_type: 'chat',
         conversation_id: message.conversation_id,
         message_id: message.id,
