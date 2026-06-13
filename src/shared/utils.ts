@@ -1,7 +1,7 @@
 /**
  * Format a date string for display
  */
-export function formatDate(dateStr: string): string {
+export function formatDate(dateStr: string, locale: string = 'zh'): string {
   // 将 "YYYY-MM-DD HH:mm:ss" 格式（无时区标识）当作 UTC 处理
   const normalized = dateStr.includes('T')
     ? dateStr
@@ -13,12 +13,12 @@ export function formatDate(dateStr: string): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins} 分钟前`;
-  if (diffHours < 24) return `${diffHours} 小时前`;
-  if (diffDays < 7) return `${diffDays} 天前`;
+  if (diffMins < 1) return locale === 'zh' ? '刚刚' : 'Just now';
+  if (diffMins < 60) return locale === 'zh' ? `${diffMins} 分钟前` : `${diffMins} min ago`;
+  if (diffHours < 24) return locale === 'zh' ? `${diffHours} 小时前` : `${diffHours} hr ago`;
+  if (diffDays < 7) return locale === 'zh' ? `${diffDays} 天前` : `${diffDays} days ago`;
 
-  return date.toLocaleDateString('zh-CN', {
+  return date.toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

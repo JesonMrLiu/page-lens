@@ -19,7 +19,7 @@ export function StreamingMessage({
   return (
     <div className="flex gap-2.5 px-4 py-3">
       {/* Avatar */}
-      <div className="shrink-0 w-7 h-7 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center">
+      <div className="shrink-0 w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center">
         <Bot size={14} />
       </div>
 
@@ -35,18 +35,16 @@ export function StreamingMessage({
         ) : null}
 
         {/* Main content */}
-        <div className="inline-block max-w-[90%] rounded-xl rounded-bl-sm px-3 py-2 text-sm leading-relaxed bg-white border border-gray-200 text-gray-800">
+        <div className="inline-block max-w-[90%] rounded-xl rounded-bl-sm px-3 py-2 text-sm leading-relaxed bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100">
           {content ? (
             <>
               <MarkdownRenderer
                 content={content}
-                className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:text-primary-700 prose-code:bg-primary-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none"
+                className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:text-primary-700 prose-code:bg-primary-50 dark:prose-code:text-primary-300 dark:prose-code:bg-primary-900/30 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:before:content-none prose-code:after:content-none"
               />
-              {/* Blinking cursor（内容输出中） */}
-              <span className="inline-block w-1.5 h-4 bg-primary-600 animate-pulse rounded-sm align-text-bottom ml-0.5" />
+              <span className="inline-block w-1.5 h-4 bg-primary-600 dark:bg-primary-400 animate-pulse rounded-sm align-text-bottom ml-0.5" />
             </>
           ) : (
-            /* 3 个跳动圆点（AI 思考中） */
             <div className="flex items-center gap-1 py-1">
               <style>{`
                 @keyframes dotBounce {

@@ -92,25 +92,7 @@ export function useChat() {
     abortRef.current = abortController;
 
     return new Promise<void>((resolve, reject) => {
-      // Send request via background service worker
-      // Include model config directly since service worker can't access sql.js
-      chrome.runtime.sendMessage({
-        type: MSG_TYPES.CHAT_REQUEST,
-        conversationId: convId,
-        modelConfigId: model.id,
-        messages,
-        modelConfig: {
-          baseUrl: model.base_url,
-          apiKey: model.api_key,
-          model: model.model_id,
-          maxTokens: model.max_tokens,
-          temperature: model.temperature,
-        },
-        thinkMode,
-        thinkRounds,
-      });
-
-      // Listen for stream chunks
+      // 先注册 listener 再发请求，避免早期事件丢失
       const listener = (message: any) => {
         if (message.conversationId !== convId) return;
 
@@ -153,6 +135,24 @@ export function useChat() {
       };
 
       chrome.runtime.onMessage.addListener(listener);
+
+      // Send request via background service worker
+      // Include model config directly since service worker can't access sql.js
+      chrome.runtime.sendMessage({
+        type: MSG_TYPES.CHAT_REQUEST,
+        conversationId: convId,
+        modelConfigId: model.id,
+        messages,
+        modelConfig: {
+          baseUrl: model.base_url,
+          apiKey: model.api_key,
+          model: model.model_id,
+          maxTokens: model.max_tokens,
+          temperature: model.temperature,
+        },
+        thinkMode,
+        thinkRounds,
+      });
     });
   }, [store, getThinkRounds]);
 

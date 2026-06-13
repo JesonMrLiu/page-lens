@@ -465,7 +465,7 @@ async function handleTestFeishuConnection(message: any): Promise<unknown> {
 }
 
 async function handleExportToFeishu(message: any): Promise<unknown> {
-  const { title, content, feishuConfig } = message;
+  const { title, content, feishuConfig, mermaidImages } = message;
   if (!feishuConfig) {
     return { type: MSG_TYPES.EXPORT_TO_FEISHU_RESULT, success: false, error: '飞书未配置' };
   }
@@ -477,6 +477,7 @@ async function handleExportToFeishu(message: any): Promise<unknown> {
       title,
       content,
       feishuConfig.folderToken || undefined,
+      mermaidImages || undefined,
     );
     return {
       type: MSG_TYPES.EXPORT_TO_FEISHU_RESULT,

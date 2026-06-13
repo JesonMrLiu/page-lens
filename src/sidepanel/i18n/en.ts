@@ -1,0 +1,178 @@
+const en: Record<string, string> = {
+  // === Header ===
+  'header.chat': 'Chat',
+  'header.notes': 'Notes',
+  'header.settings': 'Settings',
+
+  // === App ===
+  'app.initDatabase': 'Initializing database...',
+  'app.databaseInitFailed': 'Database initialization failed',
+  'app.retry': 'Retry',
+
+  // === ChatPage ===
+  'chat.newChat': 'New Chat',
+  'chat.emptyTitle': 'Start a Conversation',
+  'chat.emptyDescWithModels': 'Enter a message to start chatting with AI, or use the quick actions below',
+  'chat.emptyDescNoModels': 'Please configure an AI model in Settings first',
+  'chat.sendFailed': 'Send failed',
+
+  // === ChatInput ===
+  'chatInput.placeholder': 'Type a message... (Enter to send, Shift+Enter for new line)',
+  'chatInput.stopGenerating': 'Stop generating',
+  'chatInput.send': 'Send',
+
+  // === ChatMessage ===
+  'chatMessage.alreadySaved': 'This message has already been saved as a note',
+  'chatMessage.savedAsNote': 'Saved as note',
+  'chatMessage.saveFailed': 'Save failed',
+  'chatMessage.copy': 'Copy',
+  'chatMessage.copied': 'Copied',
+  'chatMessage.saved': 'Saved',
+  'chatMessage.saveAsNote': 'Save as note',
+
+  // === ThinkingProcessPanel ===
+  'thinking.inProgress': 'Thinking (Round {round})...',
+  'thinking.complete': 'Thinking Process ({count} rounds)',
+  'thinking.roundLabel': 'Thinking Round {round}',
+  'thinking.currentlyThinking': 'Thinking...',
+
+  // === QuickActions ===
+  'quickActions.actionFailed': 'Action failed',
+  'quickActions.summarize': 'Summarize',
+  'quickActions.translateToZh': 'En→Zh',
+  'quickActions.translateToEn': 'Zh→En',
+  'quickActions.prefix': 'Quick:',
+
+  // === ModelSelector ===
+  'modelSelector.noModel': 'No model configured',
+
+  // === ThinkModeSelector ===
+  'thinkMode.none': 'Direct',
+  'thinkMode.normal': 'Think',
+  'thinkMode.deep': 'Deep Think',
+
+  // === ModelConfigList ===
+  'modelConfig.title': 'AI Models ({count})',
+  'modelConfig.add': 'Add',
+  'modelConfig.addNewModel': 'Add New Model',
+  'modelConfig.noModels': 'No AI models configured',
+  'modelConfig.default': 'Default',
+  'modelConfig.addedAt': 'Added on {date}',
+  'modelConfig.setDefault': 'Set as default',
+  'modelConfig.edit': 'Edit',
+  'modelConfig.confirmDelete': 'Confirm delete',
+  'modelConfig.cancel': 'Cancel',
+  'modelConfig.delete': 'Delete',
+
+  // === ModelConfigForm ===
+  'modelForm.connectionSuccess': 'Connection successful!',
+  'modelForm.connectionFailed': 'Connection failed',
+  'modelForm.providerLabel': 'Service Provider',
+  'modelForm.customProvider': 'Custom',
+  'modelForm.nameLabel': 'Name',
+  'modelForm.namePlaceholder': 'e.g.: DeepseekAI',
+  'modelForm.baseUrlLabel': 'API URL',
+  'modelForm.baseUrlHint': 'Supports OpenAI-compatible API URLs',
+  'modelForm.apiKeyLabel': 'API Key',
+  'modelForm.apiKeyLocalHint': '(Optional for local services)',
+  'modelForm.apiKeyPlaceholderLocal': 'No API Key needed for local services',
+  'modelForm.modelIdLabel': 'Model ID',
+  'modelForm.customModel': 'Custom model...',
+  'modelForm.modelIdPlaceholder': 'Enter model ID',
+  'modelForm.backToPresets': '← Back to preset model list',
+  'modelForm.maxTokensLabel': 'Max Tokens',
+  'modelForm.temperatureLabel': 'Temperature ({value})',
+  'modelForm.update': 'Update',
+  'modelForm.add': 'Add',
+  'modelForm.testConnection': 'Test connection',
+  'modelForm.cancel': 'Cancel',
+  'modelForm.setDefault': 'Set as default',
+  'modelForm.delete': 'Delete',
+
+  // === FeishuConfigForm ===
+  'feishu.connectionSuccessWithFolder': 'Connection successful! App credentials and folder permissions verified.',
+  'feishu.connectionSuccessNoFolder': 'Connection successful! Feishu app authentication passed.',
+  'feishu.connectionFailed': 'Connection failed',
+  'feishu.saveSuccess': 'Saved successfully!',
+  'feishu.saveFailed': 'Save failed',
+  'feishu.title': 'Feishu App Configuration',
+  'feishu.configured': 'Configured',
+  'feishu.appIdLabel': 'App ID',
+  'feishu.appSecretLabel': 'App Secret',
+  'feishu.appSecretPlaceholder': 'Enter Feishu App Secret',
+  'feishu.folderTokenLabel': 'Folder Token (optional)',
+  'feishu.folderTokenPlaceholder': 'Target folder token',
+  'feishu.folderTokenHint': 'Exported documents will be saved to this folder. Requires: the app has drive:drive and docx:document permissions enabled, and the app has been added as a collaborator to this folder.',
+  'feishu.folderTokenTip': 'Tip: If the connection test fails, try clearing the Folder Token and test authentication alone first.',
+  'feishu.save': 'Save',
+  'feishu.testConnection': 'Test connection',
+  'feishu.goToOpenPlatform': 'Go to Feishu Open Platform to create an app',
+
+  // === NotesPage ===
+  'notes.filterAll': 'All',
+  'notes.filterSummary': 'Summary',
+  'notes.filterTranslation': 'Translation',
+  'notes.filterChat': 'Chat',
+  'notes.deleted': 'Note deleted',
+  'notes.exportedToFeishu': 'Exported to Feishu',
+  'notes.exportFailed': 'Export failed',
+  'notes.emptyTitle': 'No notes yet',
+  'notes.emptyDesc': 'Save AI replies in chat, or save page summaries as notes',
+
+  // === NoteCard ===
+  'noteCard.sourceChat': 'Chat',
+  'noteCard.sourceSummary': 'Summary',
+  'noteCard.sourceTranslation': 'Translation',
+  'noteCard.sourceManual': 'Manual',
+  'noteCard.exportToFeishu': 'Export to Feishu',
+  'noteCard.confirmDelete': 'Confirm delete',
+  'noteCard.delete': 'Delete',
+
+  // === NoteDetail ===
+  'noteDetail.sourceChat': 'Chat',
+  'noteDetail.sourceSummary': 'Summary',
+  'noteDetail.sourceTranslation': 'Translation',
+  'noteDetail.sourceManual': 'Manual',
+  'noteDetail.source': 'Source',
+  'noteDetail.sourceLabel': 'Source: ',
+  'noteDetail.copied': 'Copied',
+  'noteDetail.copy': 'Copy',
+  'noteDetail.openFeishuDoc': 'Open Feishu Document',
+  'noteDetail.exportToFeishu': 'Export to Feishu',
+  'noteDetail.delete': 'Delete',
+
+  // === CodeBlock ===
+  'codeBlock.copyCode': 'Copy code',
+  'codeBlock.copied': 'Copied',
+  'codeBlock.copy': 'Copy',
+
+  // === SettingsPage ===
+  'settings.tabAiModels': 'AI Models',
+  'settings.tabFeishu': 'Feishu',
+  'settings.tabGeneral': 'General',
+  'settings.generalTitle': 'General Settings',
+  'settings.language': 'Language',
+  'settings.languageZh': '中文',
+  'settings.languageEn': 'English',
+  'settings.theme': 'Theme',
+  'settings.themeLight': 'Light',
+  'settings.themeDark': 'Dark',
+  'settings.themeSystem': 'System',
+  'settings.thinkConfigTitle': 'Thinking Reasoning Config',
+  'settings.thinkConfigDesc': 'Configure reasoning rounds for different thinking modes. More rounds provide deeper analysis but consume more time and tokens.',
+  'settings.normalThinkRounds': 'Normal think rounds',
+  'settings.deepThinkRounds': 'Deep think rounds',
+  'settings.roundsFast': '1 round (fast)',
+  'settings.roundsDeep': '{max} rounds (deep)',
+  'settings.roundsUnit': '{count} rounds',
+  'settings.save': 'Save settings',
+  'settings.saved': 'Saved',
+
+  // === formatDate ===
+  'date.justNow': 'Just now',
+  'date.minutesAgo': '{count} min ago',
+  'date.hoursAgo': '{count} hr ago',
+  'date.daysAgo': '{count} days ago',
+};
+
+export default en;

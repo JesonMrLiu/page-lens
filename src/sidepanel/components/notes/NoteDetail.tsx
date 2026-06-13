@@ -5,6 +5,7 @@ import { formatDate } from '@/shared/utils';
 import { getEffectiveSourceUrl } from '@/db/repositories/note.repo';
 import { Button } from '@/sidepanel/components/shared/Button';
 import { MarkdownRenderer } from '@/sidepanel/components/shared/MarkdownRenderer';
+import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
 
 interface NoteDetailProps {
   note: Note;
@@ -13,18 +14,18 @@ interface NoteDetailProps {
   onExportToFeishu: (id: number) => Promise<{ success: boolean; docUrl?: string; error?: string }>;
 }
 
-const sourceTypeLabels: Record<Note['source_type'], string> = {
-  chat: '对话',
-  summary: '总结',
-  translation: '翻译',
-  manual: '手动',
-};
-
 export function NoteDetail({ note, onBack, onDelete, onExportToFeishu }: NoteDetailProps) {
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
-  // 来源 URL（旧笔记回退到所属对话的 page_url）
+  const { t, locale } = useTranslation();
   const sourceUrl = useMemo(() => getEffectiveSourceUrl(note), [note]);
+
+  const sourceTypeLabels: Record<Note['source_type'], string> = {
+    chat: t('noteDetail.sourceChat'),
+    summary: t('noteDetail.sourceSummary'),
+    translation: t('noteDetail.sourceTranslation'),
+    manual: t('noteDetail.sourceManual'),
+  };
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(note.content);
@@ -41,41 +42,40 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu }: NoteDet
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 bg-white shrink-0">
-        <button onClick={onBack} className="text-gray-500 hover:text-gray-700">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
+        <button onClick={onBack} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
           <ArrowLeft size={16} />
         </button>
-        <h2 className="flex-1 text-sm font-medium text-gray-800 truncate">{note.title}</h2>
+        <h2 className="flex-1 text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{note.title}</h2>
       </div>
 
       {/* Meta */}
-      <div className="px-4 py-2 border-b border-gray-100 bg-gray-50 flex items-center gap-3 text-[10px] text-gray-500 shrink-0">
-        <span>{formatDate(note.created_at)}</span>
-        <span className="px-1.5 py-0.5 bg-white rounded border border-gray-200">{sourceTypeLabels[note.source_type]}</span>
+      <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex items-center gap-3 text-[10px] text-gray-500 dark:text-gray-400 shrink-0">
+        <span>{formatDate(note.created_at, locale)}</span>
+        <span className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600">{sourceTypeLabels[note.source_type]}</span>
         {sourceUrl && (
           <a
             href={sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-0.5 text-primary-600 hover:underline truncate"
+            className="flex items-center gap-0.5 text-primary-600 dark:text-primary-400 hover:underline truncate"
           >
             <ExternalLink size={10} />
-            来源
+            {t('noteDetail.source')}
           </a>
         )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {/* 来源引用：在正文开头展示原文链接 */}
         {sourceUrl && (
-          <blockquote className="mb-3 pl-3 border-l-2 border-primary-300 text-xs text-gray-500">
-            来源：
+          <blockquote className="mb-3 pl-3 border-l-2 border-primary-300 dark:border-primary-700 text-xs text-gray-500 dark:text-gray-400">
+            {t('noteDetail.sourceLabel')}
             <a
               href={sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary-600 hover:underline break-all"
+              className="text-primary-600 dark:text-primary-400 hover:underline break-all"
             >
               {sourceUrl}
             </a>
@@ -83,15 +83,15 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu }: NoteDet
         )}
         <MarkdownRenderer
           content={note.content}
-          className="prose prose-sm max-w-none prose-p:my-2 prose-headings:my-3 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1"
+          className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1"
         />
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 bg-white shrink-0">
+      <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
         <Button onClick={handleCopy} variant="secondary" size="sm">
           {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? '已复制' : '复制'}
+          {copied ? t('noteDetail.copied') : t('noteDetail.copy')}
         </Button>
         {note.feishu_doc_url ? (
           <a
@@ -101,19 +101,19 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu }: NoteDet
           >
             <Button variant="secondary" size="sm">
               <ExternalLink size={14} />
-              打开飞书文档
+              {t('noteDetail.openFeishuDoc')}
             </Button>
           </a>
         ) : (
           <Button onClick={handleExport} loading={exporting} variant="primary" size="sm">
             <FileText size={14} />
-            导出到飞书
+            {t('noteDetail.exportToFeishu')}
           </Button>
         )}
         <div className="flex-1" />
         <Button onClick={() => onDelete(note.id)} variant="danger" size="sm">
           <Trash2 size={14} />
-          删除
+          {t('noteDetail.delete')}
         </Button>
       </div>
     </div>

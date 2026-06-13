@@ -11,12 +11,14 @@ import { modelConfigRepo } from '@/db/repositories/model-config.repo';
 import { useToast } from '@/sidepanel/components/shared/Toast';
 import { MSG_TYPES } from '@/shared/constants';
 import { extractDomain } from '@/shared/utils';
+import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
 import type { ThinkMode } from '@/shared/types';
 
 export function ChatPage() {
   const chat = useChat();
   const { models } = useModels();
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const [sending, setSending] = useState(false);
   const [thinkMode, setThinkMode] = useState<ThinkMode>('none');
   const pageContextRef = useRef<{ url: string; content: string } | null>(null);
@@ -33,7 +35,7 @@ export function ChatPage() {
     }
   }, [models, chat.selectedModelId, chat.setModel]);
 
-  // Get current window ID on mount (WINDOW_ID_CURRENT is a sentinel value, not the real ID)
+  // Get current window ID on mount
   useEffect(() => {
     chrome.windows.getCurrent().then((win) => {
       currentWindowId.current = win.id ?? null;
@@ -51,13 +53,13 @@ export function ChatPage() {
           chat.setPageContext(tabResponse.url, tabResponse.title || '');
         }
       } catch {
-        // Silently ignore — page context is optional
+        // Silently ignore
       }
     };
     detectInitialPage();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for tab URL changes (page navigation, tab switching)
+  // Listen for tab URL changes
   useEffect(() => {
     if (tabListenerRegistered.current) return;
     tabListenerRegistered.current = true;
@@ -67,7 +69,6 @@ export function ChatPage() {
       changeInfo: chrome.tabs.TabChangeInfo,
       tab: chrome.tabs.Tab,
     ) => {
-      // Only react to URL changes in active tabs within our window
       if (changeInfo.url && tab.active && tab.windowId === currentWindowId.current) {
         const url = changeInfo.url;
         if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -77,7 +78,6 @@ export function ChatPage() {
     };
 
     const handleTabActivated = async (activeInfo: chrome.tabs.TabActiveInfo) => {
-      // Only react to activation in our window
       if (activeInfo.windowId !== currentWindowId.current) return;
       try {
         const tab = await chrome.tabs.get(activeInfo.tabId);
@@ -105,13 +105,11 @@ export function ChatPage() {
       let pageContext: string | null = null;
 
       try {
-        // 获取当前标签页 URL，判断是否切换了页面
         const tabResponse = await chrome.runtime.sendMessage({
           type: MSG_TYPES.GET_ACTIVE_TAB,
         });
         const currentUrl = tabResponse?.url || '';
 
-        // URL 变化或首次发送时，重新提取页面内容
         if (currentUrl !== pageContextRef.current?.url) {
           const response = await chrome.runtime.sendMessage({
             type: MSG_TYPES.EXTRACT_PAGE,
@@ -121,20 +119,19 @@ export function ChatPage() {
             pageContextRef.current = { url: currentUrl, content: response.data.textContent };
           }
         } else {
-          // 同一页面，复用缓存
           pageContext = pageContextRef.current?.content || null;
         }
       } catch {
-        // 提取失败时静默忽略，消息照常发送
+        // Silently ignore
       }
 
       await chat.sendMessage(content, pageContext, thinkMode);
     } catch (err: any) {
-      showToast('error', err.message || '发送失败');
+      showToast('error', err.message || t('chat.sendFailed'));
     } finally {
       setSending(false);
     }
-  }, [chat, showToast, thinkMode]);
+  }, [chat, showToast, thinkMode, t]);
 
   const handleQuickAction = useCallback((prompt: string) => {
     handleSend(prompt);
@@ -151,7 +148,7 @@ export function ChatPage() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-white shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <ModelSelector
             models={models}
@@ -160,7 +157,7 @@ export function ChatPage() {
             disabled={chat.isStreaming}
           />
           {pageDomain && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-gray-400 bg-gray-50 rounded shrink-0" title={chat.currentPageUrl ?? ''}>
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700 rounded shrink-0" title={chat.currentPageUrl ?? ''}>
               <Globe size={10} />
               {pageDomain}
             </span>
@@ -168,11 +165,11 @@ export function ChatPage() {
         </div>
         <button
           onClick={handleNewChat}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-md transition-colors shrink-0"
-          title="新对话"
+          className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-md transition-colors shrink-0"
+          title={t('chat.newChat')}
         >
           <Plus size={14} />
-          新对话
+          {t('chat.newChat')}
         </button>
       </div>
 
@@ -190,8 +187,8 @@ export function ChatPage() {
       ) : (
         <EmptyState
           icon={<MessageSquare size={48} />}
-          title="开始对话"
-          description={hasModels ? '输入消息开始与 AI 对话，或使用下方快捷操作' : '请先在设置中配置 AI 模型'}
+          title={t('chat.emptyTitle')}
+          description={hasModels ? t('chat.emptyDescWithModels') : t('chat.emptyDescNoModels')}
         />
       )}
 

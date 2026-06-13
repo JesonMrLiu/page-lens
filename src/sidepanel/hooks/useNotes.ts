@@ -3,6 +3,7 @@ import { noteRepo, getEffectiveSourceUrl } from '@/db/repositories/note.repo';
 import { feishuConfigRepo } from '@/db/repositories/feishu-config.repo';
 import type { Note } from '@/shared/types';
 import { MSG_TYPES } from '@/shared/constants';
+import { renderAllMermaidBlocks } from '@/sidepanel/utils/mermaid-renderer';
 
 interface UseNotesReturn {
   notes: Note[];
@@ -67,11 +68,24 @@ export function useNotes(): UseNotesReturn {
         ? `> 原文链接：${sourceUrl}\n\n${note.content}`
         : note.content;
 
+      // 渲染 Mermaid 块为 PNG 图片
+      let mermaidImages: Array<{ base64: string; width: number; height: number } | null> | undefined;
+      try {
+        mermaidImages = await renderAllMermaidBlocks(exportContent);
+        if (mermaidImages && mermaidImages.length === 0) {
+          mermaidImages = undefined;
+        }
+      } catch (err) {
+        console.warn('[PageLens] Mermaid 渲染异常，将回退为代码块:', err);
+        mermaidImages = undefined;
+      }
+
       const response = await chrome.runtime.sendMessage({
         type: MSG_TYPES.EXPORT_TO_FEISHU,
         noteId,
         title: note.title,
         content: exportContent,
+        mermaidImages,
         feishuConfig: {
           appId: feishuConfig.app_id,
           appSecret: feishuConfig.app_secret,

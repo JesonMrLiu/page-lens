@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Trash2, Star } from 'lucide-react';
 import { Button } from '@/sidepanel/components/shared/Button';
+import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
 import type { ModelConfig, CreateModelConfig } from '@/shared/types';
 import { DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE } from '@/shared/constants';
 import {
@@ -34,8 +35,8 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const { t } = useTranslation();
 
-  // When editing, check if the existing model_id is in the preset's available_models
   useEffect(() => {
     if (model && selectedPresetId !== 'custom') {
       const preset = getPresetById(selectedPresetId);
@@ -68,12 +69,12 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
       const result = await onTest(baseUrl, apiKey, modelId);
       setTestResult({
         success: result.success,
-        message: result.success ? '连接成功！' : (result.error ?? '连接失败'),
+        message: result.success ? t('modelForm.connectionSuccess') : (result.error ?? t('modelForm.connectionFailed')),
       });
     } catch (err: any) {
       setTestResult({
         success: false,
-        message: err?.message ?? '连接失败',
+        message: err?.message ?? t('modelForm.connectionFailed'),
       });
     } finally {
       setTesting(false);
@@ -121,7 +122,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
     <div className="space-y-3">
       {/* Provider selector */}
       <div>
-        <label className="block text-xs text-gray-600 mb-1">服务提供商</label>
+        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">{t('modelForm.providerLabel')}</label>
         <select
           className="input-field"
           value={selectedPresetId}
@@ -132,17 +133,17 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
               {p.name}
             </option>
           ))}
-          <option value="custom">自定义</option>
+          <option value="custom">{t('modelForm.customProvider')}</option>
         </select>
       </div>
 
       {/* Name */}
       <div>
-        <label className="block text-xs text-gray-600 mb-1">名称</label>
+        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">{t('modelForm.nameLabel')}</label>
         <input
           type="text"
           className="input-field"
-          placeholder="例如：DeepseekAI"
+          placeholder={t('modelForm.namePlaceholder')}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
@@ -150,7 +151,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
 
       {/* Base URL */}
       <div>
-        <label className="block text-xs text-gray-600 mb-1">API 地址</label>
+        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">{t('modelForm.baseUrlLabel')}</label>
         <input
           type="text"
           className="input-field"
@@ -158,35 +159,35 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
         />
-        <p className="text-[10px] text-gray-400 mt-0.5">支持 OpenAI 兼容的 API 地址</p>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{t('modelForm.baseUrlHint')}</p>
       </div>
 
       {/* API Key */}
       <div>
-        <label className="block text-xs text-gray-600 mb-1">
-          API Key{localProvider && <span className="text-gray-400 ml-1">(本地服务可不填)</span>}
+        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">
+          {t('modelForm.apiKeyLabel')}{localProvider && <span className="text-gray-400 dark:text-gray-500 ml-1">{t('modelForm.apiKeyLocalHint')}</span>}
         </label>
         <div className="relative">
           <input
             type={showApiKey ? 'text' : 'password'}
             className="input-field pr-8"
-            placeholder={localProvider ? '本地服务无需 API Key' : 'sk-...'}
+            placeholder={localProvider ? t('modelForm.apiKeyPlaceholderLocal') : 'sk-...'}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
           />
           <button
             type="button"
             onClick={() => setShowApiKey(!showApiKey)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
           >
             {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         </div>
       </div>
 
-      {/* Model ID - dropdown + custom input */}
+      {/* Model ID */}
       <div>
-        <label className="block text-xs text-gray-600 mb-1">模型 ID</label>
+        <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">{t('modelForm.modelIdLabel')}</label>
         {showModelDropdown && !useCustomModelId ? (
           <div className="space-y-1.5">
             <select
@@ -206,7 +207,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
                   {m}
                 </option>
               ))}
-              <option value="__custom__">自定义模型...</option>
+              <option value="__custom__">{t('modelForm.customModel')}</option>
             </select>
           </div>
         ) : (
@@ -214,20 +215,20 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
             <input
               type="text"
               className="input-field"
-              placeholder="输入模型 ID"
+              placeholder={t('modelForm.modelIdPlaceholder')}
               value={modelId}
               onChange={(e) => setModelId(e.target.value)}
             />
             {showModelDropdown && useCustomModelId && (
               <button
                 type="button"
-                className="text-[10px] text-primary-500 hover:text-primary-600"
+                className="text-[10px] text-primary-500 dark:text-primary-400 hover:text-primary-600 dark:hover:text-primary-300"
                 onClick={() => {
                   setUseCustomModelId(false);
                   setModelId(currentPreset!.default_model_id);
                 }}
               >
-                ← 返回预置模型列表
+                {t('modelForm.backToPresets')}
               </button>
             )}
           </div>
@@ -237,7 +238,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
       {/* Max Tokens & Temperature */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-gray-600 mb-1">最大 Tokens</label>
+          <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">{t('modelForm.maxTokensLabel')}</label>
           <input
             type="number"
             className="input-field"
@@ -248,7 +249,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">温度 ({temperature.toFixed(1)})</label>
+          <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">{t('modelForm.temperatureLabel', { value: temperature.toFixed(1) })}</label>
           <input
             type="range"
             className="w-full mt-2"
@@ -263,7 +264,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
 
       {/* Test connection result */}
       {testResult && (
-        <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+        <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
           {testResult.message}
         </div>
       )}
@@ -271,24 +272,24 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
       {/* Action buttons */}
       <div className="flex items-center gap-2 pt-1">
         <Button onClick={handleSave} loading={saving} disabled={!isValid} size="sm">
-          {model ? '更新' : '添加'}
+          {model ? t('modelForm.update') : t('modelForm.add')}
         </Button>
         <Button onClick={handleTest} loading={testing} variant="secondary" size="sm" disabled={!isValid}>
-          测试连接
+          {t('modelForm.testConnection')}
         </Button>
         {onCancel && (
           <Button onClick={onCancel} variant="ghost" size="sm">
-            取消
+            {t('modelForm.cancel')}
           </Button>
         )}
         {model && onDelete && (
           <div className="flex-1 flex justify-end gap-1">
             {onSetDefault && (
-              <Button onClick={() => onSetDefault(model.id)} variant="ghost" size="sm" title="设为默认">
+              <Button onClick={() => onSetDefault(model.id)} variant="ghost" size="sm" title={t('modelForm.setDefault')}>
                 <Star size={14} />
               </Button>
             )}
-            <Button onClick={() => onDelete(model.id)} variant="danger" size="sm" title="删除">
+            <Button onClick={() => onDelete(model.id)} variant="danger" size="sm" title={t('modelForm.delete')}>
               <Trash2 size={14} />
             </Button>
           </div>

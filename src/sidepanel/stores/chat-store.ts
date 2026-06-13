@@ -119,6 +119,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   appendStreamContent: (chunk: string) => {
     set((state) => ({
       streamingContent: state.streamingContent + chunk,
+      // 兜底：正文 chunk 已到达，思考必然已结束，确保面板收起
+      // 不依赖 THINK_STREAM_END 事件是否送达
+      isThinking: state.isThinking ? false : state.isThinking,
     }));
   },
 

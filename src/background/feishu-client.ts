@@ -163,6 +163,7 @@ export async function testFeishuConnection(
 
 /**
  * Create a new Feishu document and write content to it.
+ * Supports Mermaid diagrams rendered as images.
  */
 export async function createFeishuDocument(
   appId: string,
@@ -170,6 +171,7 @@ export async function createFeishuDocument(
   title: string,
   content: string,
   folderToken?: string,
+  mermaidImages?: (MermaidImage | null)[],
 ): Promise<{ docId: string; docUrl: string }> {
   const token = await getTenantAccessToken(appId, appSecret);
 
@@ -203,8 +205,12 @@ export async function createFeishuDocument(
 
   const docId = createData.data.document.document_id;
 
-  // 2. Add content blocks (batched: Feishu allows at most 50 blocks per request)
-  const blocks = markdownToFeishuBlocks(content);
+  // 2. Convert markdown to blocks (mermaid → image placeholder or code block)
+  const { blocks, imageBlockIndices } = markdownToFeishuBlocks(content, mermaidImages);
+
+  // 3. Batch-create blocks and collect block_ids for image placeholders
+  const createdBlockIds: (string | null)[] = new Array(blocks.length).fill(null);
+
   if (blocks.length > 0) {
     const blocksUrl = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${docId}/children?document_revision_id=-1`;
     const BATCH_SIZE = 50;
@@ -226,6 +232,27 @@ export async function createFeishuDocument(
           : '请检查应用是否已开通「创建及编辑新版文档」(docx:document) 权限。';
         throw new Error(`文档已创建，但写入正文失败（错误码 ${blocksData.code}：${blocksData.msg || '未知错误'}）。${hint}`);
       }
+
+      // Collect created block_ids from response
+      const children: any[] = blocksData.data?.children || [];
+      for (let i = 0; i < children.length; i++) {
+        createdBlockIds[offset + i] = children[i]?.block_id || null;
+      }
+    }
+  }
+
+  // 4. Upload mermaid images and bind to placeholder blocks
+  for (const [blockIdx, img] of imageBlockIndices) {
+    const blockId = createdBlockIds[blockIdx];
+    if (!blockId) {
+      console.warn(`[PageLens] Mermaid 图片占位块 #${blockIdx} 未找到 block_id，跳过上传`);
+      continue;
+    }
+    try {
+      await uploadAndBindImage(token, docId, blockId, img);
+    } catch (err) {
+      console.warn(`[PageLens] Mermaid 图片上传失败（块 #${blockIdx}）:`, err);
+      // 单张图失败不中断整体导出
     }
   }
 
@@ -234,24 +261,127 @@ export async function createFeishuDocument(
 }
 
 /**
- * Convert markdown text to Feishu document block format.
- * Supports: headings, paragraphs, bullet lists, ordered lists, code blocks, quotes.
+ * 上传图片素材并绑定到文档中的图片占位块。
  */
-function markdownToFeishuBlocks(markdown: string): any[] {
+async function uploadAndBindImage(
+  token: string,
+  docId: string,
+  blockId: string,
+  image: MermaidImage,
+): Promise<void> {
+  // 1. base64 → Blob
+  const binaryStr = atob(image.base64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], { type: 'image/png' });
+
+  // 2. Upload media
+  const uploadUrl = `${FEISHU_BASE_URL}/drive/v1/medias/upload_all`;
+  const formData = new FormData();
+  formData.append('file_name', `mermaid-${blockId}.png`);
+  formData.append('parent_type', 'docx_image');
+  formData.append('parent_node', blockId);
+  formData.append('size', String(blob.size));
+  formData.append('file', blob);
+
+  const uploadResp = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+  const uploadData: any = await safeParseJSON(uploadResp, uploadUrl);
+  if (uploadData.code !== 0) {
+    const hint = uploadData.code === 91204
+      ? '请在飞书开放平台开通「查看、评论、编辑和管理云空间中所有文件」(drive:drive) 权限并发布版本'
+      : uploadData.msg || '未知错误';
+    throw new Error(`Mermaid 图片上传失败（错误码 ${uploadData.code}：${hint}）`);
+  }
+
+  const fileToken = uploadData.data?.file_token;
+  if (!fileToken) {
+    throw new Error('Mermaid 图片上传成功但未返回 file_token');
+  }
+
+  // 3. Bind image to placeholder block
+  const patchUrl = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${blockId}?document_revision_id=-1`;
+  const patchResp = await fetch(patchUrl, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      replace_image: {
+        token: fileToken,
+      },
+    }),
+  });
+  const patchData: any = await safeParseJSON(patchResp, patchUrl);
+  if (patchData.code !== 0) {
+    throw new Error(`Mermaid 图片绑定失败（错误码 ${patchData.code}：${patchData.msg || '未知错误'}）`);
+  }
+}
+
+/**
+ * Mermaid 图片数据（从 sidepanel 渲染后传入）
+ */
+interface MermaidImage {
+  base64: string;
+  width: number;
+  height: number;
+}
+
+/**
+ * Convert markdown text to Feishu document block format.
+ * Supports: headings, paragraphs, bullet lists, ordered lists, code blocks, quotes, mermaid diagrams.
+ *
+ * @param mermaidImages 按 mermaid 块出现顺序排列的渲染图片，null 表示该块渲染失败应回退为代码块
+ * @returns { blocks, imageBlockIndices } imageBlockIndices 记录了哪些 blocks 下标是图片占位块
+ */
+function markdownToFeishuBlocks(
+  markdown: string,
+  mermaidImages?: (MermaidImage | null)[],
+): { blocks: any[]; imageBlockIndices: Map<number, MermaidImage> } {
   const lines = markdown.split('\n');
   const blocks: any[] = [];
+  const imageBlockIndices = new Map<number, MermaidImage>();
   let inCodeBlock = false;
   let codeContent = '';
+  let codeLang = ''; // 围栏语言标识（如 mermaid）
+  let mermaidIndex = 0; // 当前 mermaid 块的序号
 
   for (const line of lines) {
     // Code block toggle
     if (line.startsWith('```')) {
       if (inCodeBlock) {
-        blocks.push(createCodeBlock(codeContent.trim()));
+        // 闭合围栏
+        const trimmedContent = codeContent.trim();
+        if (codeLang.toLowerCase() === 'mermaid' && mermaidImages) {
+          const img = mermaidImages[mermaidIndex];
+          if (img) {
+            // 成功渲染的 mermaid → 图片占位块
+            const blockIdx = blocks.length;
+            blocks.push({ block_type: 27, image: {} });
+            imageBlockIndices.set(blockIdx, img);
+          } else {
+            // 渲染失败 → 回退为代码块
+            blocks.push(createCodeBlock(trimmedContent));
+          }
+          mermaidIndex++;
+        } else {
+          blocks.push(createCodeBlock(trimmedContent));
+        }
         codeContent = '';
+        codeLang = '';
         inCodeBlock = false;
       } else {
+        // 开启围栏，提取语言标识
         inCodeBlock = true;
+        codeLang = line.slice(3).trim();
       }
       continue;
     }
@@ -295,7 +425,7 @@ function markdownToFeishuBlocks(markdown: string): any[] {
     }
   }
 
-  return blocks;
+  return { blocks, imageBlockIndices };
 }
 
 function createTextElement(content: string): any {
