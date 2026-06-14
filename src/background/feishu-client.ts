@@ -108,7 +108,7 @@ async function diagnoseFolderError(code: number, msg: string, token: string): Pr
     // 二级诊断：根文件夹 API 只需 drive:drive scope，无需协作者授权。
     const scopeOk = await checkDriveScope(token);
     if (!scopeOk) {
-      return '云空间权限 scope 未生效（错误码 91204）。请前往飞书开放平台「权限管理」开通「查看云空间中文件元数据」(drive:drive:readonly) 或「查看、评论、编辑和管理云空间中所有文件」(drive:drive)，然后在「版本管理与发布」创建新版本并发布（scope 修改需发布版本后才生效）。';
+      return '云空间权限 scope 未生效（错误码 91204）。请前往飞书开放平台「权限管理」开通「查看云空间中文件元数据」(drive:drive.metadata:readonly) 或「查看、评论、编辑和管理云空间中所有文件」(drive:drive)，然后在「版本管理与发布」创建新版本并发布（scope 修改需发布版本后才生效）。';
     }
     return '应用未被授权访问该文件夹（错误码 91204）。云空间权限已开通，但应用未被添加为该文件夹的协作者。请在飞书云空间打开目标文件夹 → 右上角「共享」→ 搜索并添加该应用对应的「机器人」为协作者（建议授予「可编辑」权限，以便后续写入文档）。';
   }

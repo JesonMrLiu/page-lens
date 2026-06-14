@@ -1,7 +1,7 @@
 {
   "name": "page-lens",
-  "version": "1.0.0",
-  "description": "AI-powered page summarization, translation, and note-taking Chrome extension with Feishu integration",
+  "version": "1.1.0",
+  "description": "AI-powered page summarization, translation, and note-taking browser extension (Chrome / Edge) with Feishu integration",
   "type": "module",
   "scripts": {
     "dev": "vite",
