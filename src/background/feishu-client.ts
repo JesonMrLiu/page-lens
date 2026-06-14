@@ -391,13 +391,11 @@ function markdownToFeishuBlocks(
       continue;
     }
 
-    // Headings
-    if (line.startsWith('### ')) {
-      blocks.push(createHeading(line.slice(4), 3));
-    } else if (line.startsWith('## ')) {
-      blocks.push(createHeading(line.slice(3), 2));
-    } else if (line.startsWith('# ')) {
-      blocks.push(createHeading(line.slice(2), 1));
+    // Headings（1-6 级；\s+ 要求 # 后至少一个空白，避免 "##无空格" 被误判为标题）
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      blocks.push(createHeading(headingMatch[2], level));
     }
     // Bullet list
     else if (line.startsWith('- ') || line.startsWith('* ')) {
@@ -429,31 +427,152 @@ function markdownToFeishuBlocks(
 }
 
 function createTextElement(content: string): any {
+  return makeTextElement(content);
+}
+
+/** 飞书 text_element_style 支持的行内样式字段。 */
+interface TextElementStyle {
+  bold?: true;
+  italic?: true;
+  strikethrough?: true;
+  inline_code?: true;
+  link?: { url: string };
+}
+
+/** 构造一个 text_run 元素（content + 样式）。 */
+function makeTextElement(content: string, style: TextElementStyle = {}): any {
   return {
     text_run: {
       content,
-      text_element_style: {},
+      text_element_style: style,
     },
   };
+}
+
+// 行内标记规则：定界符 + 对应样式（按长度降序排列，保证 ***、** 等长标记优先于 *）
+const INLINE_RULES: { delimiter: string; style: TextElementStyle }[] = [
+  { delimiter: '***', style: { bold: true, italic: true } },
+  { delimiter: '**', style: { bold: true } },
+  { delimiter: '__', style: { bold: true } },
+  { delimiter: '~~', style: { strikethrough: true } },
+  { delimiter: '`', style: { inline_code: true } },
+  { delimiter: '*', style: { italic: true } },
+  { delimiter: '_', style: { italic: true } },
+];
+
+// 链接 [text](url)
+const LINK_REGEX = /\[([^\]]*)\]\(([^)\s]+)\)/;
+
+/** 去除转义反斜杠：\* → *。 */
+function stripEscapes(text: string): string {
+  return text.replace(/\\(.)/g, '$1');
+}
+
+/** 查找定界符的下一个出现位置，跳过被反斜杠转义的字符；未找到返回 -1。 */
+function findDelimiter(text: string, delimiter: string): number {
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === '\\') {
+      i += 2;
+      continue;
+    }
+    if (text.startsWith(delimiter, i)) {
+      return i;
+    }
+    i++;
+  }
+  return -1;
+}
+
+function mergeStyle(base: TextElementStyle, extra: TextElementStyle): TextElementStyle {
+  return { ...base, ...extra };
+}
+
+/**
+ * 将一行 Markdown 文本解析为飞书 text_run 元素数组，支持行内格式：
+ * 加粗 **x** / __x__、斜体 *x* / _x_、加粗斜体 ***x***、删除线 ~~x~~、
+ * 行内代码 `x`、链接 [text](url)，并支持简单嵌套。保证至少返回一个元素。
+ */
+function parseInline(text: string, inheritedStyle: TextElementStyle = {}): any[] {
+  const elements: any[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    let bestPos = -1; // 标记起始位置
+    let bestEnd = -1; // 标记整体结束位置（结束定界符之后）
+    let bestContent = ''; // 标记内部内容
+    let bestContentStyle: TextElementStyle = inheritedStyle; // 标记内部内容应用的样式
+    let isLink = false;
+
+    // 1) 链接候选 [text](url)
+    const linkMatch = LINK_REGEX.exec(remaining);
+    if (linkMatch) {
+      bestPos = linkMatch.index;
+      bestEnd = linkMatch.index + linkMatch[0].length;
+      bestContent = linkMatch[1];
+      bestContentStyle = mergeStyle(inheritedStyle, { link: { url: linkMatch[2] } });
+      isLink = true;
+    }
+
+    // 2) 定界符候选（规则按长度降序；同位置时先记录者更长，配合严格 < 比较实现长标记优先）
+    for (const rule of INLINE_RULES) {
+      const start = findDelimiter(remaining, rule.delimiter);
+      // 仅当严格靠前时覆盖，保证已选中的更早候选不被取代
+      if (start !== -1 && (bestPos === -1 || start < bestPos)) {
+        const afterStart = start + rule.delimiter.length;
+        const end = findDelimiter(remaining.slice(afterStart), rule.delimiter);
+        if (end !== -1) {
+          bestPos = start;
+          bestEnd = afterStart + end + rule.delimiter.length;
+          bestContent = remaining.slice(afterStart, afterStart + end);
+          bestContentStyle = mergeStyle(inheritedStyle, rule.style);
+          isLink = false;
+        }
+      }
+    }
+
+    if (bestPos === -1) {
+      // 剩余部分无任何标记，作为普通文本输出
+      elements.push(makeTextElement(stripEscapes(remaining), inheritedStyle));
+      break;
+    }
+
+    // 标记前的普通文本
+    if (bestPos > 0) {
+      elements.push(makeTextElement(stripEscapes(remaining.slice(0, bestPos)), inheritedStyle));
+    }
+
+    if (isLink) {
+      // 链接：显示文本作为整体 run（不递归内部）
+      elements.push(makeTextElement(bestContent, bestContentStyle));
+    } else {
+      // 定界符标记：内部内容递归解析，支持嵌套格式
+      elements.push(...parseInline(bestContent, bestContentStyle));
+    }
+
+    remaining = remaining.slice(bestEnd);
+  }
+
+  return elements.length > 0 ? elements : [makeTextElement('')];
 }
 
 function createParagraph(text: string): any {
   return {
     block_type: 2, // text
     text: {
-      elements: [createTextElement(text)],
+      elements: parseInline(text),
       style: {},
     },
   };
 }
 
 function createHeading(text: string, level: number): any {
-  // block_type: 3=heading1, 4=heading2, 5=heading3
-  // 注意：字段名必须与块类型对应（heading1/heading2/heading3），否则整个写入请求会失败
+  // block_type: 3=heading1 ~ 8=heading6（即 level + 2，飞书 docx 支持 heading1-heading9）
+  // 注意：字段名必须与块类型对应（heading1 ~ heading6），否则整个写入请求会失败
   return {
     block_type: level + 2,
     [`heading${level}`]: {
-      elements: [createTextElement(text)],
+      elements: parseInline(text),
       style: {},
     },
   };
@@ -463,7 +582,7 @@ function createBulletItem(text: string): any {
   return {
     block_type: 12, // bullet
     bullet: {
-      elements: [createTextElement(text)],
+      elements: parseInline(text),
       style: {},
     },
   };
@@ -473,7 +592,7 @@ function createOrderedItem(text: string): any {
   return {
     block_type: 13, // ordered
     ordered: {
-      elements: [createTextElement(text)],
+      elements: parseInline(text),
       style: {},
     },
   };
@@ -483,7 +602,7 @@ function createQuote(text: string): any {
   return {
     block_type: 15, // quote
     quote: {
-      elements: [createTextElement(text)],
+      elements: parseInline(text),
       style: {},
     },
   };
