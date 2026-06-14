@@ -206,7 +206,7 @@ export async function createFeishuDocument(
   const docId = createData.data.document.document_id;
 
   // 2. Convert markdown to blocks (mermaid → image placeholder or code block)
-  const { blocks, imageBlockIndices } = markdownToFeishuBlocks(content, mermaidImages);
+  const { blocks, imageBlockIndices, tableBlockIndices } = markdownToFeishuBlocks(content, mermaidImages);
 
   // 3. Batch-create blocks and collect block_ids for image placeholders
   const createdBlockIds: (string | null)[] = new Array(blocks.length).fill(null);
@@ -253,6 +253,20 @@ export async function createFeishuDocument(
     } catch (err) {
       console.warn(`[PageLens] Mermaid 图片上传失败（块 #${blockIdx}）:`, err);
       // 单张图失败不中断整体导出
+    }
+  }
+
+  // 5. Fill table cells（逐格写入文本，失败不中断整体导出）
+  for (const [blockIdx, table] of tableBlockIndices) {
+    const tableBlockId = createdBlockIds[blockIdx];
+    if (!tableBlockId) {
+      console.warn(`[PageLens] 表格占位块 #${blockIdx} 未找到 block_id，跳过填充`);
+      continue;
+    }
+    try {
+      await fillTableCells(token, docId, tableBlockId, table);
+    } catch (err) {
+      console.warn(`[PageLens] 表格填充失败（块 #${blockIdx}）:`, err);
     }
   }
 
@@ -345,16 +359,23 @@ interface MermaidImage {
 function markdownToFeishuBlocks(
   markdown: string,
   mermaidImages?: (MermaidImage | null)[],
-): { blocks: any[]; imageBlockIndices: Map<number, MermaidImage> } {
+): {
+  blocks: any[];
+  imageBlockIndices: Map<number, MermaidImage>;
+  tableBlockIndices: Map<number, TableData>;
+} {
   const lines = markdown.split('\n');
   const blocks: any[] = [];
   const imageBlockIndices = new Map<number, MermaidImage>();
+  const tableBlockIndices = new Map<number, TableData>();
   let inCodeBlock = false;
   let codeContent = '';
   let codeLang = ''; // 围栏语言标识（如 mermaid）
   let mermaidIndex = 0; // 当前 mermaid 块的序号
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
     // Code block toggle
     if (line.startsWith('```')) {
       if (inCodeBlock) {
@@ -391,6 +412,25 @@ function markdownToFeishuBlocks(
       continue;
     }
 
+    // Table（GFM）：当前行以 | 开头，且下一行是分隔行 → 一次消费多行
+    if (line.trim().startsWith('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      const tableLines: string[] = [];
+      let j = i;
+      while (j < lines.length && lines[j].trim().startsWith('|')) {
+        tableLines.push(lines[j]);
+        j++;
+      }
+      const table = parseTable(tableLines);
+      if (table) {
+        const blockIdx = blocks.length;
+        blocks.push(createTablePlaceholder(table));
+        tableBlockIndices.set(blockIdx, table);
+        i = j - 1; // for 末尾会 i++，跳过已消费的表格行
+        continue;
+      }
+      // 解析失败则按普通段落处理当前行（落入下方分支）
+    }
+
     // Headings（1-6 级；\s+ 要求 # 后至少一个空白，避免 "##无空格" 被误判为标题）
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
@@ -423,7 +463,7 @@ function markdownToFeishuBlocks(
     }
   }
 
-  return { blocks, imageBlockIndices };
+  return { blocks, imageBlockIndices, tableBlockIndices };
 }
 
 function createTextElement(content: string): any {
@@ -617,4 +657,155 @@ function createCodeBlock(code: string): any {
       style: {},
     },
   };
+}
+
+/** GFM 表格解析结果。rows 含表头行，每行已对齐到 columnCount。 */
+interface TableData {
+  rows: string[][];
+  columnCount: number;
+  hasHeader: boolean; // 是否含 GFM 分隔行（决定 header_row）
+}
+
+/** 判断一行是否为 GFM 表格分隔行（如 |---|:---:|---|）。 */
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes('-')) return false;
+  let inner = trimmed;
+  if (inner.startsWith('|')) inner = inner.slice(1);
+  if (inner.endsWith('|')) inner = inner.slice(0, -1);
+  const cells = inner.split('|');
+  return cells.length > 0 && cells.every((c) => /^\s*:?-+:?\s*$/.test(c));
+}
+
+/** 将一行表格按 | 切分为单元格，处理 \| 转义，去掉首尾 |，每格 trim。 */
+function splitTableRow(line: string): string[] {
+  const PLACEHOLDER = ' ';
+  const safe = line.replace(/\\\|/g, PLACEHOLDER);
+  let inner = safe.trim();
+  if (inner.startsWith('|')) inner = inner.slice(1);
+  if (inner.endsWith('|')) inner = inner.slice(0, -1);
+  return inner
+    .split('|')
+    .map((c) => c.replace(new RegExp(PLACEHOLDER, 'g'), '|').trim());
+}
+
+/**
+ * 解析连续的 GFM 表格行为 TableData。
+ * 第一行为表头；若第二行是分隔行则 hasHeader=true 并跳过它；其余为数据行。
+ * 每行对齐到表头列数（不足补空串、超长截断）。解析失败返回 null。
+ */
+function parseTable(blockLines: string[]): TableData | null {
+  if (blockLines.length < 2) return null;
+  const header = splitTableRow(blockLines[0]);
+  const columnCount = header.length;
+  if (columnCount === 0) return null;
+
+  const hasHeader = isTableSeparator(blockLines[1]);
+  const rows: string[][] = [header];
+  for (let k = hasHeader ? 2 : 1; k < blockLines.length; k++) {
+    const cells = splitTableRow(blockLines[k]);
+    while (cells.length < columnCount) cells.push('');
+    cells.length = columnCount;
+    rows.push(cells);
+  }
+  return { rows, columnCount, hasHeader };
+}
+
+/** 构造飞书表格占位块（block_type 31），仅声明行列数与表头；内容由后处理逐格填充。 */
+function createTablePlaceholder(table: TableData): any {
+  return {
+    block_type: 31, // table
+    table: {
+      property: {
+        row_size: table.rows.length,
+        column_size: table.columnCount,
+        header_row: table.hasHeader,
+      },
+    },
+  };
+}
+
+/** 延迟工具，用于飞书创建子块的频率控制（3 QPS）。 */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 读取表格块的所有单元格 block_id（飞书创建空表后自动生成，按行优先顺序）。 */
+async function getTableCellIds(token: string, docId: string, tableBlockId: string): Promise<string[]> {
+  const url = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${tableBlockId}/children`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data: any = await safeParseJSON(res, url);
+  if (data.code !== 0) {
+    throw new Error(`读取表格单元格失败（${data.code}：${data.msg || '未知错误'}）`);
+  }
+  // table 的直接子块即单元格（block_type 32），按行优先（左→右、上→下）排列
+  const items: any[] = data.data?.items || [];
+  // 首次验证用日志：确认飞书返回的子块结构（期望全部为 cell、数量 = 行×列）；验证无误后可移除
+  console.log(
+    `[PageLens] 表格 ${tableBlockId} 返回 ${items.length} 个子块:`,
+    items.map((b) => ({ block_type: b.block_type, block_id: b.block_id })),
+  );
+  return items.map((b) => b.block_id).filter(Boolean);
+}
+
+/** 向一个单元格写入文本（创建一个 Text 子块，elements 用 parseInline 解析行内格式）。 */
+async function createCellText(
+  token: string,
+  docId: string,
+  cellBlockId: string,
+  text: string,
+): Promise<void> {
+  const url = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${cellBlockId}/children?document_revision_id=-1`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      children: [
+        {
+          block_type: 2, // text
+          text: {
+            elements: parseInline(text),
+            style: {},
+          },
+        },
+      ],
+      index: 0,
+    }),
+  });
+  const data: any = await safeParseJSON(res, url);
+  if (data.code !== 0) {
+    throw new Error(`写入单元格失败（${data.code}：${data.msg || '未知错误'}）`);
+  }
+}
+
+/**
+ * 填充表格所有单元格：先读取单元格 block_id，再按行优先顺序逐格写入文本。
+ * 受飞书 3 QPS 限制，每次创建后 sleep（最后一次不 sleep）。
+ */
+async function fillTableCells(
+  token: string,
+  docId: string,
+  tableBlockId: string,
+  table: TableData,
+): Promise<void> {
+  const cellIds = await getTableCellIds(token, docId, tableBlockId);
+  // 行优先展平所有单元格文本
+  const flatCells: string[] = [];
+  for (const row of table.rows) {
+    for (const cell of row) {
+      flatCells.push(cell);
+    }
+  }
+  const count = Math.min(cellIds.length, flatCells.length);
+  for (let k = 0; k < count; k++) {
+    await createCellText(token, docId, cellIds[k], flatCells[k]);
+    if (k < count - 1) {
+      await sleep(350); // < 3 QPS
+    }
+  }
 }
