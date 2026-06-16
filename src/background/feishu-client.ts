@@ -27,6 +27,91 @@ async function safeParseJSON(response: Response, url?: string): Promise<any> {
 
 const FEISHU_BASE_URL = 'https://open.feishu.cn/open-apis';
 
+// 飞书 docx 写入相关错误码分类。1770001 = invalid param 是参数校验失败，与权限无关；
+// 真正的权限错误是 1770032 (forbidden) / 99991663 等。文档创建成功已证明 token 与 docx:document 权限没问题。
+const FEISHU_PERMISSION_CODES = new Set<number>([
+  1770032, // forbidden（文档无编辑权限）
+  99991663, 99991672, 1254030, // 应用/用户权限类
+  99991661, // token 无效
+]);
+const FEISHU_VALIDATION_CODES = new Set<number>([
+  1770001, // invalid param（块结构非法）
+  99992402, // 字段校验失败
+  1770006, // schema mismatch
+  1770024, // invalid operation（如对非 text_run 设 link）
+  1770013, // relation mismatch（图片/文件资源关联不正确）
+]);
+const FEISHU_LIMIT_CODES = new Set<number>([
+  1770004, 1770005, 1770007, // 文档/层级/子块数超限
+  1770008, // 文件尺寸超限
+  1770010, 1770011, // 表格列/单元格超限
+  1770012, // grid 列超限
+  1770033, // 纯文本 10485760 字符超限
+  1770034, 1770035, // 单元格/资源数超限
+]);
+const FEISHU_RATE_LIMIT_CODES = new Set<number>([99991400]); // HTTP 400，触发限频
+
+/** 将飞书写入错误码归类为四类之一，返回类别与对应的中文提示。 */
+function classifyFeishuBlockError(code: number): { kind: 'permission' | 'validation' | 'limit' | 'rate' | 'other'; hint: string } {
+  if (FEISHU_PERMISSION_CODES.has(code)) {
+    return {
+      kind: 'permission',
+      hint: '文档编辑权限不足（错误码 ' + code + '）。请打开飞书目标文档右上角「...」→「添加文档应用」，把本应用加为协作者（可编辑）；或确认 docx:document 权限已开通并发布版本。',
+    };
+  }
+  if (FEISHU_LIMIT_CODES.has(code)) {
+    return {
+      kind: 'limit',
+      hint: '内容超出飞书上限（错误码 ' + code + '）。常见：表格行/列 > 9、单次写入块 > 50、纯文本 > 10MB。',
+    };
+  }
+  if (FEISHU_VALIDATION_CODES.has(code)) {
+    return {
+      kind: 'validation',
+      hint: '内容块结构校验失败（错误码 ' + code + '，与权限无关）。最可能：表格行列超 9、超长段落未分片、空图片块等。已尝试降级写入，详见 Service Worker 日志。',
+    };
+  }
+  if (FEISHU_RATE_LIMIT_CODES.has(code)) {
+    return { kind: 'rate', hint: '触发飞书 3 QPS 限频，请稍后重试。' };
+  }
+  return { kind: 'other', hint: '飞书写入失败（错误码 ' + code + '）。' };
+}
+
+/**
+ * 生成一批 block 的紧凑结构摘要，用于在写入失败时从日志定位是哪个块、什么结构不合规。
+ * 形如 [0]bt=2(text/runs=3/maxRunLen=210) | [1]bt=31(table/rows=12/cols=5) | [2]bt=27(image/empty=true)
+ */
+function summarizeBatch(batch: any[]): string {
+  return batch.map((b, i) => {
+    const t = b.block_type;
+    let detail: string;
+    if (t === 2) {
+      const runs = (b.text?.elements || []) as any[];
+      const maxLen = runs.reduce((m, e) => Math.max(m, (e.text_run?.content || '').length), 0);
+      detail = 'text/runs=' + runs.length + '/maxRunLen=' + maxLen;
+    } else if (t === 27) {
+      detail = 'image/empty=' + (!b.image?.token);
+    } else if (t >= 3 && t <= 11) {
+      detail = 'heading' + (t - 2);
+    } else if (t === 14) {
+      detail = 'code/lang=' + b.code?.language + '/len=' + ((b.code?.elements || []) as any[]).reduce((m, e) => m + (e.text_run?.content || '').length, 0);
+    } else if (t === 31) {
+      detail = 'table/rows=' + b.table?.property?.row_size + '/cols=' + b.table?.property?.column_size;
+    } else if (t === 22) {
+      detail = 'divider';
+    } else if (t === 15) {
+      detail = 'quote';
+    } else if (t === 12) {
+      detail = 'bullet';
+    } else if (t === 13) {
+      detail = 'ordered';
+    } else {
+      detail = 'type=' + t;
+    }
+    return '[' + i + ']bt=' + t + '(' + detail + ')';
+  }).join(' | ');
+}
+
 
 // Token cache
 let cachedToken: { token: string; expireAt: number } | null = null;
@@ -172,7 +257,7 @@ export async function createFeishuDocument(
   content: string,
   folderToken?: string,
   mermaidImages?: (MermaidImage | null)[],
-): Promise<{ docId: string; docUrl: string }> {
+): Promise<{ docId: string; docUrl: string; skippedCount: number }> {
   const token = await getTenantAccessToken(appId, appSecret);
 
   // 1. Create document
@@ -205,41 +290,15 @@ export async function createFeishuDocument(
 
   const docId = createData.data.document.document_id;
 
-  // 2. Convert markdown to blocks (mermaid → image placeholder or code block)
-  const { blocks, imageBlockIndices, tableBlockIndices } = markdownToFeishuBlocks(content, mermaidImages);
+  // 2. Convert markdown to blocks (mermaid → image placeholder or code block; 表格 → 标记块)
+  const { blocks, imageBlockIndices } = markdownToFeishuBlocks(content, mermaidImages);
 
-  // 3. Batch-create blocks and collect block_ids for image placeholders
-  const createdBlockIds: (string | null)[] = new Array(blocks.length).fill(null);
-
-  if (blocks.length > 0) {
-    const blocksUrl = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${docId}/children?document_revision_id=-1`;
-    const BATCH_SIZE = 50;
-    for (let offset = 0; offset < blocks.length; offset += BATCH_SIZE) {
-      const batch = blocks.slice(offset, offset + BATCH_SIZE);
-      const blocksResponse = await fetch(blocksUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ children: batch, index: offset }),
-      });
-      const blocksData: any = await safeParseJSON(blocksResponse, blocksUrl);
-      if (blocksData.code !== 0) {
-        // 99992402 = field validation failed，是请求体格式问题（块结构非法），与权限无关
-        const hint = blocksData.code === 99992402
-          ? '内容块格式校验失败，可能包含暂不支持的内容格式，请反馈该笔记内容以便排查。'
-          : '请检查应用是否已开通「创建及编辑新版文档」(docx:document) 权限。';
-        throw new Error(`文档已创建，但写入正文失败（错误码 ${blocksData.code}：${blocksData.msg || '未知错误'}）。${hint}`);
-      }
-
-      // Collect created block_ids from response
-      const children: any[] = blocksData.data?.children || [];
-      for (let i = 0; i < children.length; i++) {
-        createdBlockIds[offset + i] = children[i]?.block_id || null;
-      }
-    }
-  }
+  // 3. 写入正文块：单遍顺序写入。普通块走 create-children（批量+容错降级）；
+  //    表格走「创建嵌套块(descendants)」一次性建出带内容的整张表，内容随表一并写入。
+  const { blockIds: createdBlockIds, skipped } = await writeBlocksWithFallback(
+    token, docId, blocks,
+    (origIdx) => console.warn(`[PageLens] 表格 #${origIdx} 已降级为结构化段落`),
+  );
 
   // 4. Upload mermaid images and bind to placeholder blocks
   for (const [blockIdx, img] of imageBlockIndices) {
@@ -252,26 +311,236 @@ export async function createFeishuDocument(
       await uploadAndBindImage(token, docId, blockId, img);
     } catch (err) {
       console.warn(`[PageLens] Mermaid 图片上传失败（块 #${blockIdx}）:`, err);
+      // 绑图失败：删除已创建的空 image 块，避免文档残留破损图在后续编辑时触发 1770013
+      await deleteBlock(token, docId, blockId);
       // 单张图失败不中断整体导出
     }
   }
 
-  // 5. Fill table cells（逐格写入文本，失败不中断整体导出）
-  for (const [blockIdx, table] of tableBlockIndices) {
-    const tableBlockId = createdBlockIds[blockIdx];
-    if (!tableBlockId) {
-      console.warn(`[PageLens] 表格占位块 #${blockIdx} 未找到 block_id，跳过填充`);
+  // 表格内容已随 descendant 接口一次写入，无需逐格后处理。
+
+  const docUrl = `https://www.feishu.cn/docx/${docId}`;
+  return { docId, docUrl, skippedCount: skipped.length };
+}
+
+/** 识别表格标记块（markdownToFeishuBlocks 产出的轻量标记，不会发往飞书 API）。 */
+function isTableMarker(b: any): boolean {
+  return !!b && b.block_type === 31 && !!b._table;
+}
+
+/**
+ * 写入一段连续的普通块（非表格）：先批量(50) create-children，某批失败降级逐块写入、跳过坏块。
+ * - startIndex：本段首块在根块 children 列表的插入位置（= 已成功累计的 currentRootCount）。
+ * - segStartOrigIdx：本段首块在 allBlocks 数组的原始下标（用于回填 blockIds）。
+ * - recordIds=false 时只推进计数、不写 blockIds（用于表格降级展开的临时段落，避免覆盖主 blockIds）。
+ * 返回本段成功写入的块数（坏块不计）。权限/限频/系统错误直接抛出。
+ */
+async function writePlainSegment(
+  writeChildren: (children: any[], index: number) => Promise<{ ok: boolean; code: number; ids: string[] }>,
+  seg: any[],
+  startIndex: number,
+  segStartOrigIdx: number,
+  blockIds: (string | null)[],
+  skipped: Array<{ origIdx: number; blockType: number; code: number }>,
+  recordIds: boolean = true,
+): Promise<number> {
+  if (seg.length === 0) return 0;
+  let rootCount = startIndex;
+  const BATCH_SIZE = 50;
+
+  for (let offset = 0; offset < seg.length; offset += BATCH_SIZE) {
+    const batch = seg.slice(offset, offset + BATCH_SIZE);
+    const result = await writeChildren(batch, rootCount);
+
+    if (result.ok) {
+      if (recordIds) {
+        result.ids.forEach((id, i) => {
+          blockIds[segStartOrigIdx + offset + i] = id;
+        });
+      }
+      rootCount += batch.length;
+      await sleep(350); // < 3 QPS
       continue;
     }
-    try {
-      await fillTableCells(token, docId, tableBlockId, table);
-    } catch (err) {
-      console.warn(`[PageLens] 表格填充失败（块 #${blockIdx}）:`, err);
+
+    const cls = classifyFeishuBlockError(result.code);
+    // 权限/限频/系统类错误：不降级，直接抛出
+    if (cls.kind === 'permission' || cls.kind === 'rate' || cls.kind === 'other') {
+      console.error('[PageLens] 批量写入失败（不降级），批次摘要:', summarizeBatch(batch));
+      throw new Error(
+        `文档已创建，但写入正文失败（错误码 ${result.code}：${result.code === 0 ? '' : cls.hint}）`,
+      );
+    }
+
+    // 校验/限额类错误：降级为逐块单独写入，定位并跳过坏块
+    console.warn(
+      `[PageLens] 批次（${batch.length} 块）失败 code=${result.code}（${cls.kind}），降级逐块写入。批次摘要:`,
+      summarizeBatch(batch),
+    );
+    for (let i = 0; i < batch.length; i++) {
+      const origIdx = segStartOrigIdx + offset + i;
+      const block = batch[i];
+      const single = await writeChildren([block], rootCount);
+      if (single.ok) {
+        if (recordIds) blockIds[origIdx] = single.ids[0] || null;
+        rootCount++;
+        await sleep(350);
+        continue;
+      }
+      const singleCls = classifyFeishuBlockError(single.code);
+      // 单块仍失败：权限/限频/系统类直接抛出
+      if (singleCls.kind === 'permission' || singleCls.kind === 'rate' || singleCls.kind === 'other') {
+        throw new Error(
+          `文档已创建，但写入正文失败（错误码 ${single.code}：${singleCls.hint}）`,
+        );
+      }
+      skipped.push({ origIdx, blockType: block.block_type, code: single.code });
+      console.error(
+        `[PageLens] 跳过坏块 origIdx=${origIdx} bt=${block.block_type} code=${single.code}，摘要:`,
+        summarizeBatch([block]),
+      );
+      // 坏块不占用根槽位，rootCount 不变
     }
   }
 
-  const docUrl = `https://www.feishu.cn/docx/${docId}`;
-  return { docId, docUrl };
+  return rootCount - startIndex;
+}
+
+/**
+ * 单遍顺序写入根块，currentRootCount 单调递推 index。
+ *
+ * 关键点：飞书 index = 插入到根块 children 列表的位置。严格按 markdown 原始顺序逐块处理，
+ * 每成功插入一个根块（普通块 / 表格块 / 表格降级展开的段落）就 currentRootCount++，
+ * 下一个块的 index 永远等于 currentRootCount——天然正确，无需为坏块/降级展开补偿。
+ *
+ * - 普通块段走 create-children（批量 50 + 失败逐块降级 + 跳过坏块）。
+ * - 表格块走「创建嵌套块(descendants)」一次性建出带内容的整张表（突破 create-children 对
+ *   Table 的 9×9 上限）；失败/超大表降级为结构化段落。
+ * - 权限/限频/系统类错误不降级，直接抛出。
+ */
+async function writeBlocksWithFallback(
+  token: string,
+  docId: string,
+  allBlocks: any[],
+  onTableFallback?: (origIdx: number) => void,
+): Promise<{
+  blockIds: (string | null)[];
+  skipped: Array<{ origIdx: number; blockType: number; code: number }>;
+  writtenCount: number;
+}> {
+  const blockIds: (string | null)[] = new Array(allBlocks.length).fill(null);
+  const skipped: Array<{ origIdx: number; blockType: number; code: number }> = [];
+  let currentRootCount = 0; // 已成功落到根块列表的块数，即下一个块的 index
+
+  if (allBlocks.length === 0) {
+    return { blockIds, skipped, writtenCount: currentRootCount };
+  }
+
+  const writeChildren = async (
+    children: any[],
+    index: number,
+  ): Promise<{ ok: boolean; code: number; ids: string[] }> => {
+    const url = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${docId}/children?document_revision_id=-1`;
+    // 剥离内部辅助字段（_rawMarkdown / _table），不属于飞书 API 规范
+    const cleanChildren = children.map((b) => {
+      const { _rawMarkdown: _r, _table: _t, ...rest } = b;
+      return rest;
+    });
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ children: cleanChildren, index }),
+    });
+    const data: any = await safeParseJSON(resp, url);
+    if (data.code !== 0) return { ok: false, code: data.code, ids: [] };
+    return { ok: true, code: 0, ids: (data.data?.children || []).map((c: any) => c.block_id) };
+  };
+
+  // 表格单元格数量超过此阈值时跳过 descendant 接口直接降级（避免 descendants 数组过大）
+  const TABLE_DESC_CELL_LIMIT = 400;
+
+  let i = 0;
+  while (i < allBlocks.length) {
+    // 1) 收集连续的非表格块成一段，走批量 create-children
+    const segStart = i;
+    while (i < allBlocks.length && !isTableMarker(allBlocks[i])) i++;
+    const seg = allBlocks.slice(segStart, i);
+    if (seg.length > 0) {
+      const written = await writePlainSegment(
+        writeChildren, seg, currentRootCount, segStart, blockIds, skipped, true,
+      );
+      currentRootCount += written;
+    }
+
+    // 2) 处理表格标记块（走「创建嵌套块」接口一次性建表）
+    if (i < allBlocks.length && isTableMarker(allBlocks[i])) {
+      const origIdx = i;
+      const table: TableData = allBlocks[i]._table;
+      const cellCount = table.rows.length * table.columnCount;
+      let handled = false;
+
+      if (cellCount <= TABLE_DESC_CELL_LIMIT) {
+        const res = await createTableBlockViaDescendant(token, docId, currentRootCount, table, origIdx);
+        await sleep(350); // < 3 QPS
+        if (res.ok) {
+          blockIds[origIdx] = res.tableBlockId;
+          currentRootCount += 1; // 整张表占 1 个根槽位
+          console.log(
+            `[PageLens] 表格 #${origIdx} 创建成功 ${table.rows.length}×${table.columnCount}，tableBlockId=${res.tableBlockId}`,
+          );
+          handled = true;
+        } else {
+          const cls = classifyFeishuBlockError(res.code);
+          // 权限/限频/系统类：不降级直接抛
+          if (cls.kind === 'permission' || cls.kind === 'rate' || cls.kind === 'other') {
+            throw new Error(
+              `文档已创建，但写入表格失败（错误码 ${res.code}：${cls.hint}）`,
+            );
+          }
+          console.warn(
+            `[PageLens] 表格 #${origIdx} descendant 失败 code=${res.code}（${cls.kind}），降级为段落。rows=${table.rows.length} cols=${table.columnCount}`,
+          );
+        }
+      } else {
+        console.warn(
+          `[PageLens] 表格 #${origIdx} 单元格数 ${cellCount} 超过 ${TABLE_DESC_CELL_LIMIT} 上限，直接降级为段落`,
+        );
+      }
+
+      // 降级：展开为结构化段落逐段写入（recordIds=false 避免临时段落覆盖主 blockIds）
+      if (!handled) {
+        const fallbackBlocks = tableToFallbackBlocks(table);
+        const written = await writePlainSegment(
+          writeChildren, fallbackBlocks, currentRootCount, origIdx, blockIds, skipped, false,
+        );
+        currentRootCount += written;
+        onTableFallback?.(origIdx);
+        console.warn(
+          `[PageLens] 表格 #${origIdx} 已降级为 ${fallbackBlocks.length} 个段落（成功 ${written} 个）`,
+        );
+      }
+      i++;
+    }
+  }
+
+  return { blockIds, skipped, writtenCount: currentRootCount };
+}
+
+/** 删除文档中的一个块（document_revision_id=-1 表示基于最新版本）。失败仅告警，不抛出。 */
+async function deleteBlock(token: string, docId: string, blockId: string): Promise<void> {
+  const url = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${blockId}?document_revision_id=-1`;
+  try {
+    const resp = await fetch(url, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    await safeParseJSON(resp, url);
+  } catch (err) {
+    console.warn(`[PageLens] 删除 block ${blockId} 失败（忽略）:`, err);
+  }
 }
 
 /**
@@ -423,7 +692,15 @@ function markdownToFeishuBlocks(
       const table = parseTable(tableLines);
       if (table) {
         const blockIdx = blocks.length;
-        blocks.push(createTablePlaceholder(table));
+        // 表格不再用 create-children 占位块（该接口对 Table 的 row/column 上限为 9，
+        // 超限或校验失败会触发降级为代码块）。改为 push 一个仅用于内部识别的标记块，
+        // 由 writeBlocksWithFallback 改用「创建嵌套块(descendants)」接口一次性创建
+        // 带内容的整棵 table→cell→text 子树。
+        blocks.push({
+          block_type: 31,
+          _table: table,
+          _rawMarkdown: tableLines.join('\n'),
+        });
         tableBlockIndices.set(blockIdx, table);
         i = j - 1; // for 末尾会 i++，跳过已消费的表格行
         continue;
@@ -466,10 +743,6 @@ function markdownToFeishuBlocks(
   return { blocks, imageBlockIndices, tableBlockIndices };
 }
 
-function createTextElement(content: string): any {
-  return makeTextElement(content);
-}
-
 /** 飞书 text_element_style 支持的行内样式字段。 */
 interface TextElementStyle {
   bold?: true;
@@ -487,6 +760,61 @@ function makeTextElement(content: string, style: TextElementStyle = {}): any {
       text_element_style: style,
     },
   };
+}
+
+// 飞书对单个 text_run 的 content 有长度上限（经验安全值，留余量）。超长内容需切分成多个 text_run，
+// 否则整批 create-children 会被判为 invalid param（错误码 1770001）。
+const FEISHU_TEXT_RUN_MAX_LEN = 2000;
+
+/**
+ * 将超长文本切分为多段（每段 ≤ maxLen），优先在换行处切避免截断词句。
+ * 返回的段落拼接后与原文等价。
+ */
+function splitLongContent(content: string, maxLen: number = FEISHU_TEXT_RUN_MAX_LEN): string[] {
+  if (content.length <= maxLen) return [content];
+  const parts: string[] = [];
+  let i = 0;
+  while (i < content.length) {
+    let end = Math.min(i + maxLen, content.length);
+    if (end < content.length) {
+      const nl = content.lastIndexOf('\n', end);
+      if (nl > i + Math.floor(maxLen / 2)) end = nl; // 换行靠后则切在换行处
+    }
+    parts.push(content.slice(i, end));
+    i = end;
+  }
+  return parts;
+}
+
+/** 构造一个或多个 text_run 元素（自动对超长 content 做分片），统一供 create* 使用。 */
+function makeTextElements(content: string, style: TextElementStyle = {}): any[] {
+  return splitLongContent(content).map((c) => ({
+    text_run: {
+      content: c,
+      text_element_style: style,
+    },
+  }));
+}
+
+/**
+ * 构造单元格的 text_run 元素数组：先用 parseInline 解析行内格式（加粗/斜体/删除线/
+ * 行内代码/链接/嵌套），再对其中超长 content 的 text_run 用 splitLongContent 分片，
+ * 避免 descendant 接口单 text_run 长度上限导致整批校验失败。保证至少返回一个元素。
+ */
+function inlineElementsForCell(text: string): any[] {
+  const elements = parseInline(text);
+  const result: any[] = [];
+  for (const el of elements) {
+    if (el.text_run && el.text_run.content.length > FEISHU_TEXT_RUN_MAX_LEN) {
+      const style = el.text_run.text_element_style || {};
+      for (const piece of splitLongContent(el.text_run.content)) {
+        result.push({ text_run: { content: piece, text_element_style: style } });
+      }
+    } else {
+      result.push(el);
+    }
+  }
+  return result.length > 0 ? result : [makeTextElement('')];
 }
 
 // 行内标记规则：定界符 + 对应样式（按长度降序排列，保证 ***、** 等长标记优先于 *）
@@ -649,11 +977,12 @@ function createQuote(text: string): any {
 }
 
 function createCodeBlock(code: string): any {
+  // 代码块整段作为一个 text_run 极易超长，拆成多个 text_run 避免 1770001
   return {
     block_type: 14, // code
     code: {
       language: 1, // plain text
-      elements: [createTextElement(code)],
+      elements: makeTextElements(code),
       style: {},
     },
   };
@@ -711,101 +1040,111 @@ function parseTable(blockLines: string[]): TableData | null {
   return { rows, columnCount, hasHeader };
 }
 
-/** 构造飞书表格占位块（block_type 31），仅声明行列数与表头；内容由后处理逐格填充。 */
-function createTablePlaceholder(table: TableData): any {
-  return {
-    block_type: 31, // table
-    table: {
-      property: {
-        row_size: table.rows.length,
-        column_size: table.columnCount,
-        header_row: table.hasHeader,
-      },
-    },
-  };
-}
-
 /** 延迟工具，用于飞书创建子块的频率控制（3 QPS）。 */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 读取表格块的所有单元格 block_id（飞书创建空表后自动生成，按行优先顺序）。 */
-async function getTableCellIds(token: string, docId: string, tableBlockId: string): Promise<string[]> {
-  const url = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${tableBlockId}/children`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const data: any = await safeParseJSON(res, url);
-  if (data.code !== 0) {
-    throw new Error(`读取表格单元格失败（${data.code}：${data.msg || '未知错误'}）`);
+/**
+ * 构造「创建嵌套块(descendants)」接口所需的整棵子树（table→cell→text），一次性携带单元格内容。
+ * 纯构造，不发请求。临时 block_id 命名：table=t{tableIdx}；cell=t{tableIdx}_c{r}_{c}；
+ * cell 内文本=t{tableIdx}_c{r}_{c}_p0（行优先，0-based）。
+ *
+ * 相比旧方案（create-children 创建空占位块 + 逐格 fillTableCells），该结构一次性建好表格并写入
+ * 内容，并突破 create-children 接口对 Table 的 9 行/9 列上限（descendant 接口 column_size 上限 100，
+ * 单元格不超 2000 时行数无固定上限），也避免逐格 sleep 的低效。
+ */
+function createTableDescendant(
+  table: TableData,
+  tableIdx: number,
+): { childrenId: string[]; descendants: any[] } {
+  const tableId = `t${tableIdx}`;
+  const rowCount = table.rows.length;
+  const colCount = table.columnCount;
+  const cellIds: string[] = [];
+  const descendants: any[] = [];
+
+  for (let r = 0; r < rowCount; r++) {
+    for (let c = 0; c < colCount; c++) {
+      cellIds.push(`t${tableIdx}_c${r}_${c}`);
+    }
   }
-  // table 的直接子块即单元格（block_type 32），按行优先（左→右、上→下）排列
-  const items: any[] = data.data?.items || [];
-  // 首次验证用日志：确认飞书返回的子块结构（期望全部为 cell、数量 = 行×列）；验证无误后可移除
-  console.log(
-    `[PageLens] 表格 ${tableBlockId} 返回 ${items.length} 个子块:`,
-    items.map((b) => ({ block_type: b.block_type, block_id: b.block_id })),
-  );
-  return items.map((b) => b.block_id).filter(Boolean);
+
+  // table 块（bt 31）：children 列出全部 cell 临时 id（行优先顺序）
+  descendants.push({
+    block_id: tableId,
+    block_type: 31,
+    table: {
+      property: {
+        row_size: rowCount,
+        column_size: colCount,
+        header_row: !!table.hasHeader, // 显式布尔，避免依赖默认值
+      },
+    },
+    children: cellIds,
+  });
+
+  // 每个 cell（bt 32）+ 其文本子块（bt 2）。飞书创建空单元格后不会自动含文本块，
+  // 必须显式提供文本子块才能写入单元格内容。
+  for (let r = 0; r < rowCount; r++) {
+    for (let c = 0; c < colCount; c++) {
+      const cellId = `t${tableIdx}_c${r}_${c}`;
+      const paraId = `${cellId}_p0`;
+      const cellText = table.rows[r][c] ?? '';
+      descendants.push({ block_id: cellId, block_type: 32, table_cell: {}, children: [paraId] });
+      descendants.push({
+        block_id: paraId,
+        block_type: 2, // text
+        text: { elements: inlineElementsForCell(cellText), style: {} },
+        children: [], // 叶子块显式声明空 children，与官方创建嵌套块示例对齐
+      });
+    }
+  }
+
+  return { childrenId: [tableId], descendants };
 }
 
-/** 向一个单元格写入文本（创建一个 Text 子块，elements 用 parseInline 解析行内格式）。 */
-async function createCellText(
+/**
+ * 通过「创建嵌套块(descendants)」接口一次性创建带内容的整张表格。
+ * 返回 { ok, code, tableBlockId }；code!==0 表示创建失败（由调用方决定是否降级）。
+ */
+async function createTableBlockViaDescendant(
   token: string,
   docId: string,
-  cellBlockId: string,
-  text: string,
-): Promise<void> {
-  const url = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${cellBlockId}/children?document_revision_id=-1`;
+  index: number,
+  table: TableData,
+  tableIdx: number,
+): Promise<{ ok: boolean; code: number; tableBlockId: string | null }> {
+  const { childrenId, descendants } = createTableDescendant(table, tableIdx);
+  // 注意：路径段为单数 descendant（非 descendants），否则飞书返回 404 not found
+  const url = `${FEISHU_BASE_URL}/docx/v1/documents/${docId}/blocks/${docId}/descendant?document_revision_id=-1`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      children: [
-        {
-          block_type: 2, // text
-          text: {
-            elements: parseInline(text),
-            style: {},
-          },
-        },
-      ],
-      index: 0,
-    }),
+    body: JSON.stringify({ index, children_id: childrenId, descendants }),
   });
   const data: any = await safeParseJSON(res, url);
   if (data.code !== 0) {
-    throw new Error(`写入单元格失败（${data.code}：${data.msg || '未知错误'}）`);
+    return { ok: false, code: data.code, tableBlockId: null };
   }
+  // descendant 接口返回 data.children，首个即新建的 table 顶层块
+  const tableBlockId = data.data?.children?.[0]?.block_id ?? null;
+  return { ok: true, code: 0, tableBlockId };
 }
 
 /**
- * 填充表格所有单元格：先读取单元格 block_id，再按行优先顺序逐格写入文本。
- * 受飞书 3 QPS 限制，每次创建后 sleep（最后一次不 sleep）。
+ * 表格降级为结构化段落（加粗表头 + 逐行用「|」连接的段落），保留可读结构。
+ * 不再用 createCodeBlock——那正是"表格变成代码块"bug 的来源。
  */
-async function fillTableCells(
-  token: string,
-  docId: string,
-  tableBlockId: string,
-  table: TableData,
-): Promise<void> {
-  const cellIds = await getTableCellIds(token, docId, tableBlockId);
-  // 行优先展平所有单元格文本
-  const flatCells: string[] = [];
-  for (const row of table.rows) {
-    for (const cell of row) {
-      flatCells.push(cell);
-    }
+function tableToFallbackBlocks(table: TableData): any[] {
+  const blocks: any[] = [];
+  for (let r = 0; r < table.rows.length; r++) {
+    const line = table.rows[r].map((cell) => cell ?? '').join(' | ');
+    const isHeader = table.hasHeader && r === 0;
+    blocks.push(createParagraph(isHeader ? `**${line}**` : line));
   }
-  const count = Math.min(cellIds.length, flatCells.length);
-  for (let k = 0; k < count; k++) {
-    await createCellText(token, docId, cellIds[k], flatCells[k]);
-    if (k < count - 1) {
-      await sleep(350); // < 3 QPS
-    }
-  }
+  return blocks;
 }

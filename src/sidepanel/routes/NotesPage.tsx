@@ -39,6 +39,9 @@ export function NotesPage() {
       if (selectedNote?.id === id) {
         setSelectedNote({ ...selectedNote, feishu_doc_url: result.docUrl ?? '' });
       }
+      if (result.skippedCount && result.skippedCount > 0) {
+        showToast('info', `已跳过 ${result.skippedCount} 个飞书不支持的内容块，详见扩展后台日志`);
+      }
     } else {
       showToast('error', result.error ?? t('notes.exportFailed'));
     }

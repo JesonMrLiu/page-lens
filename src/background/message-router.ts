@@ -484,6 +484,7 @@ async function handleExportToFeishu(message: any): Promise<unknown> {
       success: true,
       docUrl: result.docUrl,
       docId: result.docId,
+      skippedCount: result.skippedCount || 0,
     };
   } catch (err: any) {
     return {

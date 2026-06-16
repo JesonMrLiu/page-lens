@@ -13,7 +13,7 @@ interface UseNotesReturn {
   refresh: () => void;
   createNote: (note: { title: string; content: string; source_url?: string; source_type?: Note['source_type']; conversation_id?: number; tags?: string }) => Promise<Note>;
   deleteNote: (id: number) => Promise<boolean>;
-  exportToFeishu: (noteId: number) => Promise<{ success: boolean; docUrl?: string; error?: string }>;
+  exportToFeishu: (noteId: number) => Promise<{ success: boolean; docUrl?: string; error?: string; skippedCount?: number }>;
 }
 
 export function useNotes(): UseNotesReturn {
@@ -50,7 +50,7 @@ export function useNotes(): UseNotesReturn {
     return result;
   }, [refresh]);
 
-  const exportToFeishu = useCallback(async (noteId: number): Promise<{ success: boolean; docUrl?: string; error?: string }> => {
+  const exportToFeishu = useCallback(async (noteId: number): Promise<{ success: boolean; docUrl?: string; error?: string; skippedCount?: number }> => {
     const note = noteRepo.getById(noteId);
     if (!note) {
       return { success: false, error: '笔记不存在' };
@@ -98,7 +98,12 @@ export function useNotes(): UseNotesReturn {
         refresh();
       }
 
-      return { success: response.success, docUrl: response.docUrl, error: response.error };
+      return {
+        success: response.success,
+        docUrl: response.docUrl,
+        error: response.error,
+        skippedCount: (response as any).skippedCount || 0,
+      };
     } catch (err: any) {
       return { success: false, error: err.message || '导出失败' };
     }
