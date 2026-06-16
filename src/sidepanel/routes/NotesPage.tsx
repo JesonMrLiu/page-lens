@@ -9,7 +9,7 @@ import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
 import type { Note } from '@/shared/types';
 
 export function NotesPage() {
-  const { notes, filter, setFilter, deleteNote, exportToFeishu } = useNotes();
+  const { notes, filter, setFilter, deleteNote, exportToFeishu, updateNote, checkFeishuDoc } = useNotes();
   const { showToast } = useToast();
   const { t } = useTranslation();
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -48,6 +48,25 @@ export function NotesPage() {
     return result;
   };
 
+  const handleUpdateTitle = async (id: number, title: string) => {
+    await updateNote(id, { title });
+    if (selectedNote?.id === id) {
+      setSelectedNote({ ...selectedNote, title });
+    }
+  };
+
+  const handleCheckFeishuDoc = async (id: number) => {
+    const result = await checkFeishuDoc(id);
+    // 仅在确认云文档已被删除时同步本地状态并提示；其他情况（权限/网络）静默维持现状
+    if (result.deleted) {
+      if (selectedNote?.id === id) {
+        setSelectedNote({ ...selectedNote, feishu_doc_id: '', feishu_doc_url: '' });
+      }
+      showToast('info', t('notes.feishuDocDeleted'));
+    }
+    return result;
+  };
+
   if (selectedNote) {
     return (
       <NoteDetail
@@ -55,6 +74,8 @@ export function NotesPage() {
         onBack={() => setSelectedNote(null)}
         onDelete={handleDelete}
         onExportToFeishu={handleExport}
+        onUpdateTitle={handleUpdateTitle}
+        onCheckFeishuDoc={handleCheckFeishuDoc}
       />
     );
   }

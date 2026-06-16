@@ -116,6 +116,7 @@ const zh: Record<string, string> = {
   'notes.deleted': '笔记已删除',
   'notes.exportedToFeishu': '已导出到飞书',
   'notes.exportFailed': '导出失败',
+  'notes.feishuDocDeleted': '飞书文档已被删除，可重新导出',
   'notes.emptyTitle': '暂无笔记',
   'notes.emptyDesc': '在聊天中保存 AI 回复，或总结页面内容后可保存为笔记',
 

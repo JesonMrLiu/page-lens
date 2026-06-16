@@ -2,7 +2,7 @@ import { MSG_TYPES } from '@/shared/constants';
 import type { ExtensionMessage } from '@/shared/messages';
 import type { ChatMessageInput } from '@/shared/types';
 import { testConnection, streamChatCompletion, streamThinkingRound, chatCompletion } from './ai-client';
-import { testFeishuConnection, createFeishuDocument } from './feishu-client';
+import { testFeishuConnection, createFeishuDocument, checkFeishuDocExists } from './feishu-client';
 import { extractFromActiveTab } from './page-extractor';
 
 /**
@@ -47,6 +47,12 @@ export function setupMessageRouter(): void {
 
         case MSG_TYPES.EXPORT_TO_FEISHU:
           handleExportToFeishu(message)
+            .then(sendResponse)
+            .catch((err) => sendResponse({ error: err.message }));
+          return true;
+
+        case MSG_TYPES.CHECK_FEISHU_DOC:
+          handleCheckFeishuDoc(message)
             .then(sendResponse)
             .catch((err) => sendResponse({ error: err.message }));
           return true;
@@ -495,6 +501,34 @@ async function handleExportToFeishu(message: any): Promise<unknown> {
   }
 }
 
+async function handleCheckFeishuDoc(message: any): Promise<unknown> {
+  const { docId, feishuConfig } = message;
+  if (!feishuConfig || !docId) {
+    return { type: MSG_TYPES.CHECK_FEISHU_DOC_RESULT, exists: false, deleted: false, error: '缺少文档 ID 或飞书配置' };
+  }
+
+  try {
+    const result = await checkFeishuDocExists(
+      feishuConfig.appId,
+      feishuConfig.appSecret,
+      docId,
+    );
+    return {
+      type: MSG_TYPES.CHECK_FEISHU_DOC_RESULT,
+      exists: result.exists,
+      deleted: result.deleted,
+      error: result.error,
+    };
+  } catch (err: any) {
+    return {
+      type: MSG_TYPES.CHECK_FEISHU_DOC_RESULT,
+      exists: false,
+      deleted: false,
+      error: err.message || '验证文档失败',
+    };
+  }
+}
+
 async function handleGenerateTitle(message: any): Promise<unknown> {
   const { content, modelConfig } = message;
   if (!content || !modelConfig) {
@@ -509,7 +543,7 @@ async function handleGenerateTitle(message: any): Promise<unknown> {
       messages: [
         {
           role: 'user',
-          content: `请为以下内容生成一个不超过20字的简洁中文标题，直接输出标题本身，不要引号和多余说明：\n\n${String(content).slice(0, 2000)}`,
+          content: `请为以下内容生成一个不超过50字的简洁中文标题，概括内容核心要点，直接输出标题本身，不要引号和多余说明：\n\n${String(content).slice(0, 2000)}`,
         },
       ],
       maxTokens: 100,

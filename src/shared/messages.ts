@@ -92,12 +92,53 @@ export interface ExportToFeishuMessage {
   noteId: number;
   title: string;
   content: string;
+  mermaidImages?: Array<{ base64: string; width: number; height: number } | null>;
+  feishuConfig?: {
+    appId: string;
+    appSecret: string;
+    folderToken?: string;
+  };
 }
 
 export interface ExportToFeishuResultMessage {
   type: typeof MSG_TYPES.EXPORT_TO_FEISHU_RESULT;
   success: boolean;
   docUrl?: string;
+  docId?: string;
+  error?: string;
+  skippedCount?: number;
+}
+
+export interface CheckFeishuDocMessage {
+  type: typeof MSG_TYPES.CHECK_FEISHU_DOC;
+  docId: string;
+  feishuConfig: {
+    appId: string;
+    appSecret: string;
+  };
+}
+
+export interface CheckFeishuDocResultMessage {
+  type: typeof MSG_TYPES.CHECK_FEISHU_DOC_RESULT;
+  exists: boolean;
+  deleted?: boolean;
+  error?: string;
+}
+
+export interface GenerateTitleMessage {
+  type: typeof MSG_TYPES.GENERATE_TITLE;
+  content: string;
+  modelConfig: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+  };
+}
+
+export interface GenerateTitleResultMessage {
+  type: typeof MSG_TYPES.GENERATE_TITLE_RESULT;
+  success: boolean;
+  title?: string;
   error?: string;
 }
 
@@ -139,6 +180,10 @@ export type ExtensionMessage =
   | TestFeishuResultMessage
   | ExportToFeishuMessage
   | ExportToFeishuResultMessage
+  | CheckFeishuDocMessage
+  | CheckFeishuDocResultMessage
+  | GenerateTitleMessage
+  | GenerateTitleResultMessage
   | GetActiveTabMessage
   | GetActiveTabResultMessage
   | ExtractContentScriptMessage

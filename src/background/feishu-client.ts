@@ -247,6 +247,71 @@ export async function testFeishuConnection(
 }
 
 /**
+ * 检查某个飞书文档是否仍然存在/可访问。
+ * 调用「获取文档基本信息」接口 GET /docx/v1/documents/{document_id}。
+ *
+ * 返回值约定（保守策略：除明确「已删除」外，一律不判定为删除）：
+ *  - exists: true —— 文档正常存在（code === 0）
+ *  - exists:false, deleted:true —— 文档已被删除/不存在
+ *  - exists:false, deleted:false, error —— 权限不足 / 网络 / 认证失败等，**不应**据此清除本地记录
+ */
+export async function checkFeishuDocExists(
+  appId: string,
+  appSecret: string,
+  docId: string,
+): Promise<{ exists: boolean; deleted?: boolean; error?: string }> {
+  // Step 1: 取 token；认证失败属「不可判定」，保守不清除
+  let token: string;
+  try {
+    token = await getTenantAccessToken(appId, appSecret);
+  } catch (error: any) {
+    return { exists: false, deleted: false, error: `认证失败：${error.message}` };
+  }
+
+  // Step 2: 查询文档基本信息
+  const docUrl = `${FEISHU_BASE_URL}/docx/v1/documents/${encodeURIComponent(docId)}`;
+  let data: any;
+  try {
+    const resp = await fetch(docUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+    });
+    data = await safeParseJSON(resp, docUrl);
+  } catch (error: any) {
+    // 网络/解析异常属「不可判定」，保守不清除
+    return { exists: false, deleted: false, error: error.message };
+  }
+
+  const code: number = data.code;
+  const msg: string = (data.msg || '').toLowerCase();
+
+  if (code === 0) {
+    return { exists: true };
+  }
+
+  // 判定「已删除/不存在」：飞书删除类错误码 + msg 关键词双重判断
+  // 1254040: 文档不存在或已删除；1254003: 文档不存在；1254004: 文档不存在
+  const FEISHU_DOC_DELETED_CODES = new Set<number>([1254040, 1254003, 1254004]);
+  const DELETED_KEYWORDS = ['不存在', '已删除', '已被删除', '已归档', 'not found', 'deleted', 'has been deleted'];
+  const isDeletedByCode = FEISHU_DOC_DELETED_CODES.has(code);
+  const isDeletedByMsg = DELETED_KEYWORDS.some(kw => msg.includes(kw));
+  if (isDeletedByCode || isDeletedByMsg) {
+    return { exists: false, deleted: true };
+  }
+
+  // 权限不足（文档可能仍在，只是当前应用无权访问）——保守不清除
+  const PERMISSION_KEYWORDS = ['没有权限', '权限', 'permission', 'forbidden', '无权'];
+  if (FEISHU_PERMISSION_CODES.has(code) || PERMISSION_KEYWORDS.some(kw => msg.includes(kw))) {
+    return { exists: false, deleted: false, error: `权限不足（code ${code}）：${data.msg || ''}` };
+  }
+
+  // 其他未知错误——保守不清除
+  return { exists: false, deleted: false, error: `未知错误（code ${code}）：${data.msg || ''}` };
+}
+
+/**
  * Create a new Feishu document and write content to it.
  * Supports Mermaid diagrams rendered as images.
  */

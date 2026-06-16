@@ -57,9 +57,9 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
     try {
       const conversation = conversationRepo.getById(message.conversation_id);
 
-      let title = conversation?.page_title?.trim() || '';
+      let title = await generateTitleByAI(message.content);
       if (!title) {
-        title = await generateTitleByAI(message.content);
+        title = conversation?.page_title?.trim() || '';
       }
       if (!title) {
         title = conversationTitle || message.content.slice(0, 30) + '...';

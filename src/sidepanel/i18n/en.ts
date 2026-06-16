@@ -116,6 +116,7 @@ const en: Record<string, string> = {
   'notes.deleted': 'Note deleted',
   'notes.exportedToFeishu': 'Exported to Feishu',
   'notes.exportFailed': 'Export failed',
+  'notes.feishuDocDeleted': 'The Feishu document was deleted. You can re-export it.',
   'notes.emptyTitle': 'No notes yet',
   'notes.emptyDesc': 'Save AI replies in chat, or save page summaries as notes',
 

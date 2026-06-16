@@ -90,6 +90,20 @@ export const noteRepo = {
     }
   },
 
+  /**
+   * 清除笔记的飞书云文档关联（如检测到云文档已被删除时调用）。
+   * 清除后该笔记会重新被视为「未导出」，UI 按钮回到「导出到飞书」。
+   */
+  async clearFeishuExport(id: number): Promise<void> {
+    const item = getDb().notes.find(n => n.id === id);
+    if (item) {
+      item.feishu_doc_id = '';
+      item.feishu_doc_url = '';
+      item.updated_at = now();
+      await saveDatabase();
+    }
+  },
+
   async delete(id: number): Promise<boolean> {
     const db = getDb();
     const idx = db.notes.findIndex(n => n.id === id);

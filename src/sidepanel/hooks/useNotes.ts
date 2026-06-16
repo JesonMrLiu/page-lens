@@ -12,8 +12,10 @@ interface UseNotesReturn {
   setFilter: (filter: Note['source_type'] | 'all') => void;
   refresh: () => void;
   createNote: (note: { title: string; content: string; source_url?: string; source_type?: Note['source_type']; conversation_id?: number; tags?: string }) => Promise<Note>;
+  updateNote: (id: number, updates: Partial<Pick<Note, 'title' | 'content' | 'tags'>>) => Promise<void>;
   deleteNote: (id: number) => Promise<boolean>;
   exportToFeishu: (noteId: number) => Promise<{ success: boolean; docUrl?: string; error?: string; skippedCount?: number }>;
+  checkFeishuDoc: (noteId: number) => Promise<{ exists: boolean; deleted?: boolean; error?: string }>;
 }
 
 export function useNotes(): UseNotesReturn {
@@ -48,6 +50,11 @@ export function useNotes(): UseNotesReturn {
     const result = await noteRepo.delete(id);
     refresh();
     return result;
+  }, [refresh]);
+
+  const updateNote = useCallback(async (id: number, updates: Partial<Pick<Note, 'title' | 'content' | 'tags'>>) => {
+    await noteRepo.update(id, updates);
+    refresh();
   }, [refresh]);
 
   const exportToFeishu = useCallback(async (noteId: number): Promise<{ success: boolean; docUrl?: string; error?: string; skippedCount?: number }> => {
@@ -109,6 +116,46 @@ export function useNotes(): UseNotesReturn {
     }
   }, [refresh]);
 
+  const checkFeishuDoc = useCallback(async (noteId: number): Promise<{ exists: boolean; deleted?: boolean; error?: string }> => {
+    const note = noteRepo.getById(noteId);
+    // 没有飞书文档 id，直接视为不存在，但不触发任何操作
+    if (!note || !note.feishu_doc_id) {
+      return { exists: false };
+    }
+
+    // 未配置飞书应用：无法验证，保守维持现状
+    const feishuConfig = feishuConfigRepo.getActive();
+    if (!feishuConfig) {
+      return { exists: false };
+    }
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: MSG_TYPES.CHECK_FEISHU_DOC,
+        docId: note.feishu_doc_id,
+        feishuConfig: {
+          appId: feishuConfig.app_id,
+          appSecret: feishuConfig.app_secret,
+        },
+      });
+
+      // 只有明确「已删除」才清除本地记录；其他失败（权限/网络/认证）维持现状
+      if (response && response.deleted === true) {
+        await noteRepo.clearFeishuExport(noteId);
+        refresh();
+      }
+
+      return {
+        exists: response?.exists ?? false,
+        deleted: response?.deleted,
+        error: response?.error,
+      };
+    } catch (err: any) {
+      // 消息通道异常：维持现状
+      return { exists: false, error: err.message };
+    }
+  }, [refresh]);
+
   return {
     notes,
     isLoading,
@@ -116,7 +163,9 @@ export function useNotes(): UseNotesReturn {
     setFilter,
     refresh,
     createNote,
+    updateNote,
     deleteNote,
     exportToFeishu,
+    checkFeishuDoc,
   };
 }
