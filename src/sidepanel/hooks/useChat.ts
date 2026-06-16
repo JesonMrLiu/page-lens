@@ -149,6 +149,7 @@ export function useChat() {
           model: model.model_id,
           maxTokens: model.max_tokens,
           temperature: model.temperature,
+          fullUrl: !!model.full_url,
         },
         thinkMode,
         thinkRounds,

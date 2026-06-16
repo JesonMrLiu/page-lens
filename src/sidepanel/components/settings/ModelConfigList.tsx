@@ -12,7 +12,7 @@ interface ModelConfigListProps {
   onUpdate: (config: UpdateModelConfig) => Promise<ModelConfig | null>;
   onDelete: (id: number) => Promise<boolean>;
   onSetDefault: (id: number) => Promise<void>;
-  onTest: (baseUrl: string, apiKey: string, model: string) => Promise<{ success: boolean; error?: string }>;
+  onTest: (baseUrl: string, apiKey: string, model: string, fullUrl?: boolean) => Promise<{ success: boolean; error?: string }>;
 }
 
 export function ModelConfigList({ models, onAdd, onUpdate, onDelete, onSetDefault, onTest }: ModelConfigListProps) {

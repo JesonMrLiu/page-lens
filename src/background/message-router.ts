@@ -116,7 +116,7 @@ async function handleChatRequest(message: any, sender: chrome.runtime.MessageSen
   // Since service worker can't use sql.js directly, we fetch model config from side panel
   // Instead, we'll receive model config details in the message or look them up
   // For now, get from a simplified storage approach
-  let modelConfig: { baseUrl: string; apiKey: string; model: string; maxTokens: number; temperature: number } | null = null;
+  let modelConfig: { baseUrl: string; apiKey: string; model: string; maxTokens: number; temperature: number; fullUrl?: boolean } | null = null;
 
   try {
     // Get model config from chrome.storage (side panel saves it there)
@@ -198,7 +198,7 @@ function handleDirectChat({
 }: {
   conversationId: number;
   messages: ChatMessageInput[];
-  modelConfig: { baseUrl: string; apiKey: string; model: string; maxTokens: number; temperature: number };
+  modelConfig: { baseUrl: string; apiKey: string; model: string; maxTokens: number; temperature: number; fullUrl?: boolean };
   abortController: AbortController;
   sendToSender: (msg: any) => void;
 }) {
@@ -211,6 +211,7 @@ function handleDirectChat({
     messages,
     maxTokens: modelConfig.maxTokens,
     temperature: modelConfig.temperature,
+    fullUrl: modelConfig.fullUrl,
     abortSignal: abortController.signal,
     onChunk: (content) => {
       fullContent += content;
@@ -251,7 +252,7 @@ async function handleThinkingChat({
 }: {
   conversationId: number;
   messages: ChatMessageInput[];
-  modelConfig: { baseUrl: string; apiKey: string; model: string; maxTokens: number; temperature: number };
+  modelConfig: { baseUrl: string; apiKey: string; model: string; maxTokens: number; temperature: number; fullUrl?: boolean };
   thinkRounds: number;
   abortController: AbortController;
   sendToSender: (msg: any) => void;
@@ -284,6 +285,7 @@ async function handleThinkingChat({
         messages: thinkMessages,
         maxTokens: modelConfig.maxTokens,
         temperature: modelConfig.temperature,
+        fullUrl: modelConfig.fullUrl,
         abortSignal: abortController.signal,
         onChunk: (content) => {
           sendToSender({
@@ -327,6 +329,7 @@ async function handleThinkingChat({
       messages: summaryMessages,
       maxTokens: modelConfig.maxTokens,
       temperature: modelConfig.temperature,
+      fullUrl: modelConfig.fullUrl,
       abortSignal: abortController.signal,
       onChunk: (content) => {
         fullContent += content;
@@ -453,11 +456,11 @@ async function handleCancelStream(message: any): Promise<unknown> {
 }
 
 async function handleTestAiConnection(message: any): Promise<unknown> {
-  const { base_url, api_key, model_id } = message.modelConfig || {};
+  const { base_url, api_key, model_id, full_url } = message.modelConfig || {};
   if (!base_url || !api_key || !model_id) {
     return { type: MSG_TYPES.TEST_AI_RESULT, success: false, error: 'Missing required fields' };
   }
-  const result = await testConnection(base_url, api_key, model_id);
+  const result = await testConnection(base_url, api_key, model_id, !!full_url);
   return { type: MSG_TYPES.TEST_AI_RESULT, ...result };
 }
 
@@ -540,6 +543,7 @@ async function handleGenerateTitle(message: any): Promise<unknown> {
       baseUrl: modelConfig.baseUrl,
       apiKey: modelConfig.apiKey,
       model: modelConfig.model,
+      fullUrl: modelConfig.fullUrl,
       messages: [
         {
           role: 'user',

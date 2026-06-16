@@ -16,7 +16,7 @@ interface ModelConfigFormProps {
   onSave: (config: CreateModelConfig | { id: number; [key: string]: any }) => Promise<void>;
   onDelete?: (id: number) => Promise<void>;
   onSetDefault?: (id: number) => Promise<void>;
-  onTest: (baseUrl: string, apiKey: string, model: string) => Promise<{ success: boolean; error?: string }>;
+  onTest: (baseUrl: string, apiKey: string, model: string, fullUrl?: boolean) => Promise<{ success: boolean; error?: string }>;
   onCancel?: () => void;
 }
 
@@ -32,6 +32,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
   const [maxTokens, setMaxTokens] = useState(model?.max_tokens ?? DEFAULT_MAX_TOKENS);
   const [temperature, setTemperature] = useState(model?.temperature ?? DEFAULT_TEMPERATURE);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [fullUrl, setFullUrl] = useState(!!model?.full_url);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -66,7 +67,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
     setTesting(true);
     setTestResult(null);
     try {
-      const result = await onTest(baseUrl, apiKey, modelId);
+      const result = await onTest(baseUrl, apiKey, modelId, fullUrl);
       setTestResult({
         success: result.success,
         message: result.success ? t('modelForm.connectionSuccess') : (result.error ?? t('modelForm.connectionFailed')),
@@ -96,6 +97,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
           model_id: modelId.trim(),
           max_tokens: maxTokens,
           temperature,
+          full_url: fullUrl ? 1 : 0,
         });
       } else {
         await onSave({
@@ -105,6 +107,7 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
           model_id: modelId.trim(),
           max_tokens: maxTokens,
           temperature,
+          full_url: fullUrl ? 1 : 0,
           is_active: 1,
         });
       }
@@ -160,6 +163,25 @@ export function ModelConfigForm({ model, onSave, onDelete, onSetDefault, onTest,
           onChange={(e) => setBaseUrl(e.target.value)}
         />
         <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{t('modelForm.baseUrlHint')}</p>
+      </div>
+
+      {/* Full URL toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-xs text-gray-600 dark:text-gray-300">{t('modelForm.fullUrlLabel')}</label>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500">{t('modelForm.fullUrlHint')}</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={fullUrl}
+          onClick={() => setFullUrl(!fullUrl)}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${fullUrl ? 'bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out ${fullUrl ? 'translate-x-4' : 'translate-x-0'}`}
+          />
+        </button>
       </div>
 
       {/* API Key */}

@@ -73,6 +73,8 @@ const en: Record<string, string> = {
   'modelForm.namePlaceholder': 'e.g.: DeepseekAI',
   'modelForm.baseUrlLabel': 'API URL',
   'modelForm.baseUrlHint': 'Supports OpenAI-compatible API URLs',
+  'modelForm.fullUrlLabel': 'Full URL',
+  'modelForm.fullUrlHint': 'When enabled, uses the URL directly without appending /chat/completions',
   'modelForm.apiKeyLabel': 'API Key',
   'modelForm.apiKeyLocalHint': '(Optional for local services)',
   'modelForm.apiKeyPlaceholderLocal': 'No API Key needed for local services',

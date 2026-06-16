@@ -16,6 +16,7 @@ export interface ModelConfig {
   model_id: string;
   max_tokens: number;
   temperature: number;
+  full_url: number;   // 1 = 完整URL，直接使用 base_url；0 = 拼接 /chat/completions
   is_default: number;
   is_active: number;
   created_at: string;
@@ -29,6 +30,7 @@ export interface CreateModelConfig {
   model_id: string;
   max_tokens?: number;
   temperature?: number;
+  full_url?: number;
   is_default?: number;
   is_active?: number;
 }

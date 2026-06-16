@@ -11,7 +11,7 @@ interface UseModelsReturn {
   addModel: (config: CreateModelConfig) => Promise<ModelConfig>;
   updateModel: (config: UpdateModelConfig) => Promise<ModelConfig | null>;
   deleteModel: (id: number) => Promise<boolean>;
-  testConnection: (baseUrl: string, apiKey: string, model: string) => Promise<{ success: boolean; error?: string }>;
+  testConnection: (baseUrl: string, apiKey: string, model: string, fullUrl?: boolean) => Promise<{ success: boolean; error?: string }>;
 }
 
 export function useModels(): UseModelsReturn {
@@ -57,10 +57,11 @@ export function useModels(): UseModelsReturn {
     baseUrl: string,
     apiKey: string,
     model: string,
+    fullUrl?: boolean,
   ): Promise<{ success: boolean; error?: string }> => {
     const response = await chrome.runtime.sendMessage({
       type: MSG_TYPES.TEST_AI_CONNECTION,
-      modelConfig: { base_url: baseUrl, api_key: apiKey, model_id: model },
+      modelConfig: { base_url: baseUrl, api_key: apiKey, model_id: model, full_url: fullUrl },
     });
     return { success: response.success, error: response.error };
   }, []);

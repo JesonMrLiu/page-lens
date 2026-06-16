@@ -52,6 +52,12 @@ export async function initDatabase(): Promise<AppData> {
         if (note.message_id === undefined) note.message_id = null;
       }
     }
+    // 迁移 modelConfigs：为旧数据补充 full_url 字段
+    if (Array.isArray(cachedData.modelConfigs)) {
+      for (const mc of cachedData.modelConfigs) {
+        if (mc.full_url === undefined) mc.full_url = 0;
+      }
+    }
   } else {
     cachedData = getDefaultData();
     await saveDatabase();

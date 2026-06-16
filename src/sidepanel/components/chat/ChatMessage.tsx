@@ -27,6 +27,7 @@ async function generateTitleByAI(content: string): Promise<string> {
         baseUrl: model.base_url,
         apiKey: model.api_key,
         model: model.model_id,
+        fullUrl: !!model.full_url,
       },
     });
     return response?.success && response.title ? response.title : '';

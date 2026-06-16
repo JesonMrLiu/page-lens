@@ -73,6 +73,8 @@ const zh: Record<string, string> = {
   'modelForm.namePlaceholder': '例如：DeepseekAI',
   'modelForm.baseUrlLabel': 'API 地址',
   'modelForm.baseUrlHint': '支持 OpenAI 兼容的 API 地址',
+  'modelForm.fullUrlLabel': '完整 URL',
+  'modelForm.fullUrlHint': '开启后直接使用上方地址，不拼接 /chat/completions',
   'modelForm.apiKeyLabel': 'API Key',
   'modelForm.apiKeyLocalHint': '(本地服务可不填)',
   'modelForm.apiKeyPlaceholderLocal': '本地服务无需 API Key',

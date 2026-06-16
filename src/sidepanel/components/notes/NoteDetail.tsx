@@ -116,6 +116,7 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu, onUpdateT
           baseUrl: model.base_url,
           apiKey: model.api_key,
           model: model.model_id,
+          fullUrl: !!model.full_url,
         },
       });
       if (response.success && response.title) {
