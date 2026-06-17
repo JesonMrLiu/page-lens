@@ -1,13 +1,11 @@
-import { Bot, User, Copy, Check, Bookmark } from 'lucide-react';
+import { Bot, User, Copy, Check, Bookmark, Loader2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import type { Message } from '@/shared/types';
 import { formatDate } from '@/shared/utils';
 import { noteRepo } from '@/db/repositories/note.repo';
 import { conversationRepo } from '@/db/repositories/conversation.repo';
-import { modelConfigRepo } from '@/db/repositories/model-config.repo';
 import { useToast } from '@/sidepanel/components/shared/Toast';
 import { MarkdownRenderer } from '@/sidepanel/components/shared/MarkdownRenderer';
-import { MSG_TYPES } from '@/shared/constants';
 import { ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
 
@@ -16,30 +14,11 @@ interface ChatMessageProps {
   conversationTitle?: string;
 }
 
-async function generateTitleByAI(content: string): Promise<string> {
-  try {
-    const model = modelConfigRepo.getDefault();
-    if (!model) return '';
-    const response = await chrome.runtime.sendMessage({
-      type: MSG_TYPES.GENERATE_TITLE,
-      content,
-      modelConfig: {
-        baseUrl: model.base_url,
-        apiKey: model.api_key,
-        model: model.model_id,
-        fullUrl: !!model.full_url,
-      },
-    });
-    return response?.success && response.title ? response.title : '';
-  } catch {
-    return '';
-  }
-}
-
 export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   const initialSaved = useMemo(() => noteRepo.getByMessageId(message.id) !== null, [message.id]);
   const [saved, setSaved] = useState(initialSaved);
+  const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
   const { t, locale } = useTranslation();
   const isUser = message.role === 'user';
@@ -55,13 +34,12 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
       showToast('info', t('chatMessage.alreadySaved'));
       return;
     }
+    setSaving(true);
     try {
       const conversation = conversationRepo.getById(message.conversation_id);
 
-      let title = await generateTitleByAI(message.content);
-      if (!title) {
-        title = conversation?.page_title?.trim() || '';
-      }
+      // 优先使用网页标题；为空时回退到对话标题，再回退到内容截断
+      let title = conversation?.page_title?.trim() || '';
       if (!title) {
         title = conversationTitle || message.content.slice(0, 30) + '...';
       }
@@ -79,6 +57,8 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
     } catch (err) {
       console.error('[PageLens] Failed to save note:', err);
       showToast('error', t('chatMessage.saveFailed'));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -138,10 +118,11 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
               </button>
               <button
                 onClick={handleSaveAsNote}
-                className={`transition-colors ${saved ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}`}
-                title={saved ? t('chatMessage.saved') : t('chatMessage.saveAsNote')}
+                disabled={saving}
+                className={`transition-colors disabled:opacity-40 ${saved ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}`}
+                title={saving ? t('chatMessage.saving') : saved ? t('chatMessage.saved') : t('chatMessage.saveAsNote')}
               >
-                <Bookmark size={12} fill={saved ? 'currentColor' : 'none'} />
+                {saving ? <Loader2 size={12} className="animate-spin" /> : <Bookmark size={12} fill={saved ? 'currentColor' : 'none'} />}
               </button>
             </>
           )}

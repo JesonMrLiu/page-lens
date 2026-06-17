@@ -29,6 +29,7 @@ const en: Record<string, string> = {
   'chatMessage.copied': 'Copied',
   'chatMessage.saved': 'Saved',
   'chatMessage.saveAsNote': 'Save as note',
+  'chatMessage.saving': 'Saving...',
 
   // === ThinkingProcessPanel ===
   'thinking.inProgress': 'Thinking (Round {round})...',

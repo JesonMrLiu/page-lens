@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Copy, Check, Trash2, FileText, Pencil, X, Sparkles } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Copy, Check, Trash2, FileText, Pencil, X, Sparkles, Loader2 } from 'lucide-react';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { Note } from '@/shared/types';
 import { MSG_TYPES } from '@/shared/constants';
@@ -179,7 +179,7 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu, onUpdateT
               className="text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-40 shrink-0"
               title="AI 优化标题"
             >
-              <Sparkles size={14} />
+              {isOptimizing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             </button>
           </>
         )}
@@ -235,8 +235,8 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu, onUpdateT
             {t('noteDetail.openFeishuDoc')}
           </Button>
         ) : (
-          <Button onClick={handleExport} loading={exporting} variant="primary" size="sm">
-            <FileText size={14} />
+          <Button onClick={handleExport} disabled={exporting} variant="primary" size="sm">
+            {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
             {t('noteDetail.exportToFeishu')}
           </Button>
         )}

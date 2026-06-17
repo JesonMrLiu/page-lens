@@ -29,6 +29,7 @@ const zh: Record<string, string> = {
   'chatMessage.copied': '已复制',
   'chatMessage.saved': '已保存',
   'chatMessage.saveAsNote': '保存为笔记',
+  'chatMessage.saving': '保存中...',
 
   // === ThinkingProcessPanel ===
   'thinking.inProgress': '思考中 (第{round}轮)...',
