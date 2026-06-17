@@ -7,6 +7,7 @@ interface StreamChatOptions {
   messages: ChatMessageInput[];
   maxTokens?: number;
   temperature?: number;
+  fullUrl?: boolean;  // true = 直接使用 baseUrl，不拼接 /chat/completions
   onChunk: (content: string) => void;
   onEnd: (fullContent: string) => void;
   onError: (error: string) => void;
@@ -24,12 +25,13 @@ export async function streamChatCompletion({
   messages,
   maxTokens = 4096,
   temperature = 0.7,
+  fullUrl,
   onChunk,
   onEnd,
   onError,
   abortSignal,
 }: StreamChatOptions): Promise<void> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const url = fullUrl ? baseUrl : `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
   try {
     const response = await fetch(url, {
@@ -114,10 +116,11 @@ export async function streamThinkingRound({
   messages,
   maxTokens = 4096,
   temperature = 0.7,
+  fullUrl,
   onChunk,
   abortSignal,
 }: Omit<StreamChatOptions, 'onEnd' | 'onError'>): Promise<string> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const url = fullUrl ? baseUrl : `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
   let fullContent = '';
 
   const response = await fetch(url, {
@@ -193,6 +196,7 @@ export async function chatCompletion({
   messages,
   maxTokens = 100,
   temperature = 0.3,
+  fullUrl,
 }: {
   baseUrl: string;
   apiKey: string;
@@ -200,8 +204,9 @@ export async function chatCompletion({
   messages: ChatMessageInput[];
   maxTokens?: number;
   temperature?: number;
+  fullUrl?: boolean;
 }): Promise<string> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const url = fullUrl ? baseUrl : `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -235,8 +240,9 @@ export async function testConnection(
   baseUrl: string,
   apiKey: string,
   model: string,
+  fullUrl?: boolean,
 ): Promise<{ success: boolean; error?: string }> {
-  const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  const url = fullUrl ? baseUrl : `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
   try {
     const response = await fetch(url, {
