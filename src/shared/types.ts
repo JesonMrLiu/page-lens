@@ -103,6 +103,14 @@ export interface Note {
 }
 
 // ===================== Page Content =====================
+export interface CommentItem {
+  author: string;       // 作者名
+  content: string;      // 评论内容
+  time?: string;        // 时间
+  likes?: number;       // 点赞数
+  isReply?: boolean;    // 是否为回复（嵌套评论）
+}
+
 export interface PageContent {
   title: string;
   description: string;
@@ -110,6 +118,7 @@ export interface PageContent {
   language: string;
   textContent: string;
   htmlContent: string;
+  comments?: CommentItem[];  // 结构化评论列表
 }
 
 // ===================== Chat Stream =====================

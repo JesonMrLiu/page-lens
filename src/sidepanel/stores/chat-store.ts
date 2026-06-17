@@ -18,6 +18,8 @@ interface ChatState {
   // Page context for conversation isolation
   currentPageUrl: string | null;
   currentPageTitle: string | null;
+  // Chunked summary progress
+  summaryProgress: { current: number; total: number } | null;
 
   // Actions
   loadConversations: () => void;
@@ -39,6 +41,9 @@ interface ChatState {
   // Page context actions
   setPageContext: (url: string, title: string) => void;
   getConversationsForCurrentPage: () => Conversation[];
+  // Summary progress actions
+  setSummaryProgress: (current: number, total: number) => void;
+  clearSummaryProgress: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -54,6 +59,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentThinkRound: 0,
   currentPageUrl: null,
   currentPageTitle: null,
+  summaryProgress: null,
 
   loadConversations: () => {
     const conversations = conversationRepo.getAll();
@@ -286,5 +292,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return conversations.filter(
       (c) => normalizePageUrl(c.page_url) === currentPageUrl,
     );
+  },
+
+  setSummaryProgress: (current: number, total: number) => {
+    set({ summaryProgress: { current, total } });
+  },
+
+  clearSummaryProgress: () => {
+    set({ summaryProgress: null });
   },
 }));

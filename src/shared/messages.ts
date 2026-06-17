@@ -163,6 +163,24 @@ export interface ExtractContentScriptResultMessage {
   error?: string;
 }
 
+export interface ChunkedSummaryStartMessage {
+  type: typeof MSG_TYPES.CHUNKED_SUMMARY_START;
+  conversationId: number;
+  totalChunks: number;
+}
+
+export interface ChunkedSummaryProgressMessage {
+  type: typeof MSG_TYPES.CHUNKED_SUMMARY_PROGRESS;
+  conversationId: number;
+  currentChunk: number;
+  totalChunks: number;
+}
+
+export interface ChunkedSummaryEndMessage {
+  type: typeof MSG_TYPES.CHUNKED_SUMMARY_END;
+  conversationId: number;
+}
+
 export type ExtensionMessage =
   | ExtractPageMessage
   | ExtractPageResultMessage
@@ -187,7 +205,10 @@ export type ExtensionMessage =
   | GetActiveTabMessage
   | GetActiveTabResultMessage
   | ExtractContentScriptMessage
-  | ExtractContentScriptResultMessage;
+  | ExtractContentScriptResultMessage
+  | ChunkedSummaryStartMessage
+  | ChunkedSummaryProgressMessage
+  | ChunkedSummaryEndMessage;
 
 // ===================== Message Helpers =====================
 export function sendMessage<T = unknown>(message: ExtensionMessage): Promise<T> {

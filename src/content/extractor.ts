@@ -1,4 +1,4 @@
-import type { PageContent } from '@/shared/types';
+import type { PageContent, CommentItem } from '@/shared/types';
 
 /**
  * Extract the main content from the current page.
@@ -35,10 +35,17 @@ export function extractPageContent(): PageContent {
     htmlContent = cleanHtml(document.body.innerHTML);
   }
 
-  // Truncate if too long
-  const MAX_LENGTH = 15000;
-  if (textContent.length > MAX_LENGTH) {
-    textContent = textContent.slice(0, MAX_LENGTH) + '\n\n[内容已截断...]';
+  // 提取评论区（加 try-catch 防止评论提取异常导致整个提取失败）
+  let comments: CommentItem[] = [];
+  try {
+    comments = extractComments();
+  } catch {
+    comments = [];
+  }
+
+  // 极端安全网：内容超过 50 万字符时截断，防滥用
+  if (textContent.length > 500000) {
+    textContent = textContent.slice(0, 500000) + '\n\n[内容过长，已截断...]';
   }
 
   return {
@@ -48,6 +55,7 @@ export function extractPageContent(): PageContent {
     language,
     textContent,
     htmlContent,
+    comments,
   };
 }
 
@@ -202,4 +210,214 @@ function cleanHtml(html: string): string {
     .replace(/<aside[\s\S]*?<\/aside>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .trim();
+}
+
+// ===================== 评论提取 =====================
+
+/** 常见评论区容器选择器，按优先级排列 */
+const COMMENT_CONTAINER_SELECTORS = [
+  '#comments',
+  '#comment_list',
+  '#commentList',
+  '.comments',
+  '.comment-list',
+  '.commentList',
+  '.CommentListV2',
+  '.discuss',
+  '.reply-list',
+  '.message-list',
+  '.reviews',
+  '.review-list',
+  '[role="comment"]',
+];
+
+/** 常见单条评论选择器 */
+const COMMENT_ITEM_SELECTORS = [
+  '.comment-item',
+  '.comment',
+  '.review-item',
+  '.message-item',
+  '.reply-item',
+  '.CommentItem',
+  '.comment-card',
+];
+
+/**
+ * 提取页面中的评论/留言列表
+ */
+function extractComments(): CommentItem[] {
+  // Step 1: 定位评论区容器
+  let container: Element | null = null;
+
+  for (const selector of COMMENT_CONTAINER_SELECTORS) {
+    const el = document.querySelector(selector);
+    if (el) {
+      // 验证：容器内应该有多个子元素（评论列表的特征）
+      const childCount = el.children.length;
+      if (childCount >= 2) {
+        container = el;
+        break;
+      }
+    }
+  }
+
+  if (!container) {
+    return [];
+  }
+
+  // Step 2: 查找单条评论元素
+  let commentElements: Element[] = [];
+
+  for (const selector of COMMENT_ITEM_SELECTORS) {
+    const items = container.querySelectorAll(selector);
+    if (items.length >= 2) {
+      commentElements = Array.from(items);
+      break;
+    }
+  }
+
+  // 如果没有找到明确的评论元素，尝试用直接子元素
+  if (commentElements.length === 0) {
+    commentElements = Array.from(container.children);
+  }
+
+  if (commentElements.length === 0) {
+    return [];
+  }
+
+  // Step 3: 解析每条评论
+  const comments: CommentItem[] = [];
+
+  for (const el of commentElements) {
+    const comment = parseCommentItem(el);
+    if (comment && comment.content.length > 0) {
+      comments.push(comment);
+    }
+  }
+
+  return comments;
+}
+
+/**
+ * 解析单条评论元素
+ */
+function parseCommentItem(el: Element): CommentItem | null {
+  const content = extractCommentContent(el);
+  if (!content) return null;
+
+  return {
+    author: extractCommentAuthor(el),
+    content,
+    time: extractCommentTime(el),
+    likes: extractCommentLikes(el),
+    isReply: isReplyComment(el),
+  };
+}
+
+/** 提取评论内容 */
+function extractCommentContent(el: Element): string {
+  const contentSelectors = [
+    '.comment-body',
+    '.comment-content',
+    '.reply-content',
+    '.review-content',
+    '.message-content',
+    '.text',
+    '.content',
+    'p',
+  ];
+
+  for (const selector of contentSelectors) {
+    const contentEl = el.querySelector(selector);
+    if (contentEl) {
+      const text = cleanText(contentEl.textContent || '');
+      if (text.length > 0) return text;
+    }
+  }
+
+  // 回退：直接用元素的文本内容
+  return cleanText(el.textContent || '');
+}
+
+/** 提取评论作者 */
+function extractCommentAuthor(el: Element): string {
+  const authorSelectors = [
+    '.author',
+    '.username',
+    '.user-name',
+    '.nickname',
+    '.comment-author',
+    '.reviewer',
+    '[itemprop="name"]',
+    '.name',
+    'a[href*="user"]',
+    'a[href*="profile"]',
+  ];
+
+  for (const selector of authorSelectors) {
+    const authorEl = el.querySelector(selector);
+    if (authorEl) {
+      const text = (authorEl.textContent || '').trim();
+      if (text.length > 0 && text.length < 50) return text;
+    }
+  }
+
+  return '';
+}
+
+/** 提取评论时间 */
+function extractCommentTime(el: Element): string | undefined {
+  // 优先用 <time> 标签
+  const timeEl = el.querySelector('time[datetime]');
+  if (timeEl) {
+    return timeEl.getAttribute('datetime') || undefined;
+  }
+
+  const timeSelectors = ['.time', '.date', '.comment-time', '.timestamp', 'time'];
+
+  for (const selector of timeSelectors) {
+    const el2 = el.querySelector(selector);
+    if (el2) {
+      const text = (el2.textContent || '').trim();
+      if (text.length > 0 && text.length < 50) return text;
+    }
+  }
+
+  return undefined;
+}
+
+/** 提取评论点赞数 */
+function extractCommentLikes(el: Element): number | undefined {
+  const likesSelectors = ['.likes', '.like-count', '.vote-count', '.upvote', '.zan', '.praise'];
+
+  for (const selector of likesSelectors) {
+    const likesEl = el.querySelector(selector);
+    if (likesEl) {
+      const text = (likesEl.textContent || '').trim();
+      const num = parseInt(text.replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(num)) return num;
+    }
+  }
+
+  return undefined;
+}
+
+/** 判断是否为回复（嵌套评论） */
+function isReplyComment(el: Element): boolean {
+  // 检查是否有嵌套层级标记
+  if (el.classList.contains('reply') || el.classList.contains('child-comment')) {
+    return true;
+  }
+
+  // 检查父元素是否也是评论容器
+  const parent = el.parentElement;
+  if (parent && parent.closest('.comment, .comment-item, .review-item')) {
+    return true;
+  }
+
+  // 检查缩进层级（常见的缩进回复模式）
+  const indent = el.querySelector('.indent, .reply-indent, .level');
+  if (indent) return true;
+
+  return false;
 }

@@ -17,6 +17,7 @@ function inlineExtractPageContent(): {
   language: string;
   textContent: string;
   htmlContent: string;
+  comments?: Array<{ author: string; content: string; time?: string; likes?: number; isReply?: boolean }>;
 } {
   // --- extractTitle ---
   function extractTitle(): string {
@@ -136,12 +137,105 @@ function inlineExtractPageContent(): {
     htmlContent = cleanHtml(document.body.innerHTML);
   }
 
-  const MAX_LENGTH = 15000;
-  if (textContent.length > MAX_LENGTH) {
-    textContent = textContent.slice(0, MAX_LENGTH) + '\n\n[内容已截断...]';
+  // 提取评论区（加 try-catch 防止评论提取异常导致整个提取失败）
+  let comments: Array<{ author: string; content: string; time?: string; likes?: number; isReply?: boolean }> = [];
+  try {
+    comments = inlineExtractComments();
+  } catch {
+    comments = [];
   }
 
-  return { title, description, url, language, textContent, htmlContent };
+  // 极端安全网：内容超过 50 万字符时截断
+  if (textContent.length > 500000) {
+    textContent = textContent.slice(0, 500000) + '\n\n[内容过长，已截断...]';
+  }
+
+  return { title, description, url, language, textContent, htmlContent, comments };
+}
+
+// --- inlineExtractComments ---
+function inlineExtractComments(): Array<{ author: string; content: string; time?: string; likes?: number; isReply?: boolean }> {
+  const containerSelectors = [
+    '#comments', '#comment_list', '#commentList', '.comments', '.comment-list',
+    '.commentList', '.CommentListV2', '.discuss', '.reply-list', '.message-list',
+    '.reviews', '.review-list', '[role="comment"]',
+  ];
+  const itemSelectors = [
+    '.comment-item', '.comment', '.review-item', '.message-item',
+    '.reply-item', '.CommentItem', '.comment-card',
+  ];
+  const contentSelectors = [
+    '.comment-body', '.comment-content', '.reply-content', '.review-content',
+    '.message-content', '.text', '.content', 'p',
+  ];
+  const authorSelectors = [
+    '.author', '.username', '.user-name', '.nickname', '.comment-author',
+    '.reviewer', '[itemprop="name"]', '.name', 'a[href*="user"]', 'a[href*="profile"]',
+  ];
+  const timeSelectors = ['.time', '.date', '.comment-time', '.timestamp', 'time'];
+  const likesSelectors = ['.likes', '.like-count', '.vote-count', '.upvote', '.zan', '.praise'];
+
+  let container: Element | null = null;
+  for (const sel of containerSelectors) {
+    const el = document.querySelector(sel);
+    if (el && el.children.length >= 2) { container = el; break; }
+  }
+  if (!container) return [];
+
+  let items: Element[] = [];
+  for (const sel of itemSelectors) {
+    const found = container.querySelectorAll(sel);
+    if (found.length >= 2) { items = Array.from(found); break; }
+  }
+  if (items.length === 0) items = Array.from(container.children);
+  if (items.length === 0) return [];
+
+  const comments: Array<{ author: string; content: string; time?: string; likes?: number; isReply?: boolean }> = [];
+
+  for (const el of items) {
+    // content
+    let content = '';
+    for (const sel of contentSelectors) {
+      const c = el.querySelector(sel);
+      if (c && (c.textContent || '').trim().length > 0) { content = (c.textContent || '').trim(); break; }
+    }
+    if (!content) content = (el.textContent || '').trim();
+    if (!content) continue;
+
+    // author
+    let author = '';
+    for (const sel of authorSelectors) {
+      const a = el.querySelector(sel);
+      if (a) { const t = (a.textContent || '').trim(); if (t.length > 0 && t.length < 50) { author = t; break; } }
+    }
+
+    // time
+    let time: string | undefined;
+    const timeTag = el.querySelector('time[datetime]');
+    if (timeTag) { time = timeTag.getAttribute('datetime') || undefined; }
+    if (!time) {
+      for (const sel of timeSelectors) {
+        const t = el.querySelector(sel);
+        if (t) { const txt = (t.textContent || '').trim(); if (txt.length > 0 && txt.length < 50) { time = txt; break; } }
+      }
+    }
+
+    // likes
+    let likes: number | undefined;
+    for (const sel of likesSelectors) {
+      const l = el.querySelector(sel);
+      if (l) { const n = parseInt((l.textContent || '').replace(/[^0-9]/g, ''), 10); if (!isNaN(n)) { likes = n; break; } }
+    }
+
+    // isReply
+    const isReply = el.classList.contains('reply') || el.classList.contains('child-comment') ||
+      !!el.querySelector('.indent, .reply-indent, .level') ||
+      !!el.closest('.comment, .comment-item, .review-item');
+
+    comments.push({ author, content, time, likes, isReply });
+  }
+
+  return comments;
 }
 
 /**

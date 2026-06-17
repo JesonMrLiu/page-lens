@@ -48,12 +48,26 @@ export const MSG_TYPES = {
   // Content script extraction
   EXTRACT: 'EXTRACT',
   EXTRACT_RESULT: 'EXTRACT_RESULT',
+
+  // Chunked summary for long content
+  CHUNKED_SUMMARY_START: 'CHUNKED_SUMMARY_START',
+  CHUNKED_SUMMARY_PROGRESS: 'CHUNKED_SUMMARY_PROGRESS',
+  CHUNKED_SUMMARY_END: 'CHUNKED_SUMMARY_END',
 } as const;
 
 // ===================== Defaults =====================
 export const DEFAULT_MAX_TOKENS = 4096;
 export const DEFAULT_TEMPERATURE = 0.7;
-export const MAX_PAGE_CONTENT_LENGTH = 15000;
+
+// ===================== Long Content Processing =====================
+/** 长内容处理阈值 - 超过此长度触发分块摘要 */
+export const CHUNK_THRESHOLD = 50000;
+/** 每个分块的目标大小 */
+export const CHUNK_SIZE = 8000;
+/** 分块之间的重叠字符数，避免边界丢失 */
+export const CHUNK_OVERLAP = 200;
+/** 页面内容绝对上限（字符数），超过此值截断 */
+export const MAX_PAGE_CONTENT_ABSOLUTE = 200000;
 
 // ===================== Prompt Templates =====================
 export const PROMPTS = {

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Plus, MessageSquare, Globe } from 'lucide-react';
+import { Plus, MessageSquare, Globe, Loader2 } from 'lucide-react';
 import { ModelSelector } from '@/sidepanel/components/chat/ModelSelector';
 import { ChatMessageList } from '@/sidepanel/components/chat/ChatMessageList';
 import { ChatInput } from '@/sidepanel/components/chat/ChatInput';
@@ -21,7 +21,7 @@ export function ChatPage() {
   const { t } = useTranslation();
   const [sending, setSending] = useState(false);
   const [thinkMode, setThinkMode] = useState<ThinkMode>('none');
-  const pageContextRef = useRef<{ url: string; content: string } | null>(null);
+  const pageContextRef = useRef<{ url: string; content: string; comments?: any[] | null; title?: string | null } | null>(null);
   const tabListenerRegistered = useRef(false);
   const currentWindowId = useRef<number | null>(null);
 
@@ -103,6 +103,8 @@ export function ChatPage() {
     setSending(true);
     try {
       let pageContext: string | null = null;
+      let comments: any[] | null = null;
+      let pageTitle: string | null = null;
 
       try {
         const tabResponse = await chrome.runtime.sendMessage({
@@ -116,16 +118,20 @@ export function ChatPage() {
           });
           if (response?.data?.textContent) {
             pageContext = response.data.textContent;
-            pageContextRef.current = { url: currentUrl, content: response.data.textContent };
+            comments = response.data.comments || null;
+            pageTitle = response.data.title || null;
+            pageContextRef.current = { url: currentUrl, content: response.data.textContent, comments, title: pageTitle };
           }
         } else {
           pageContext = pageContextRef.current?.content || null;
+          comments = pageContextRef.current?.comments || null;
+          pageTitle = pageContextRef.current?.title || null;
         }
       } catch {
         // Silently ignore
       }
 
-      await chat.sendMessage(content, pageContext, thinkMode);
+      await chat.sendMessage(content, pageContext, thinkMode, comments, pageTitle);
     } catch (err: any) {
       showToast('error', err.message || t('chat.sendFailed'));
     } finally {
@@ -172,6 +178,14 @@ export function ChatPage() {
           {t('chat.newChat')}
         </button>
       </div>
+
+      {/* Summary progress indicator */}
+      {chat.summaryProgress && (
+        <div className="flex items-center gap-2 px-3 py-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800 shrink-0">
+          <Loader2 size={14} className="animate-spin" />
+          <span>正在分析页面内容 ({chat.summaryProgress.current}/{chat.summaryProgress.total})...</span>
+        </div>
+      )}
 
       {/* Messages area */}
       {hasMessages ? (

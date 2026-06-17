@@ -68,6 +68,14 @@ export function useNotes(): UseNotesReturn {
       return { success: false, error: '请先在设置中配置飞书应用' };
     }
 
+    // 确认导出
+    const confirmed = window.confirm(
+      `即将导出笔记「${note.title}」到飞书云端，是否确认？`,
+    );
+    if (!confirmed) {
+      return { success: false, error: '用户取消导出' };
+    }
+
     try {
       // 导出内容开头附上原文链接（飞书侧渲染为引用块）
       const sourceUrl = getEffectiveSourceUrl(note);
