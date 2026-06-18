@@ -25,9 +25,14 @@ export function ChatPage() {
   const tabListenerRegistered = useRef(false);
   const currentWindowId = useRef<number | null>(null);
 
-  // Set default model on mount
+  // Ensure selectedModelId is valid: set default on mount, and re-select default
+  // when the currently selected model no longer exists (e.g. deleted/deactivated).
   useEffect(() => {
-    if (!chat.selectedModelId && models.length > 0) {
+    const selectedExists =
+      chat.selectedModelId != null &&
+      models.some((m) => m.id === chat.selectedModelId);
+
+    if (!selectedExists && models.length > 0) {
       const defaultModel = modelConfigRepo.getDefault();
       if (defaultModel) {
         chat.setModel(defaultModel.id);
