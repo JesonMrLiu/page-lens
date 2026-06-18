@@ -1,6 +1,6 @@
 import { MSG_TYPES, CHUNK_SIZE, CHUNK_OVERLAP, MAX_PAGE_CONTENT_ABSOLUTE } from '@/shared/constants';
 import type { ExtensionMessage } from '@/shared/messages';
-import type { ChatMessageInput } from '@/shared/types';
+import type { ChatMessageInput, ContentPart } from '@/shared/types';
 import { testConnection, streamChatCompletion, streamThinkingRound, chatCompletion } from './ai-client';
 import { testFeishuConnection, createFeishuDocument, checkFeishuDocExists } from './feishu-client';
 import { extractFromActiveTab } from './page-extractor';
@@ -110,7 +110,34 @@ async function handleExtractPage(
 const activeStreams = new Map<number, AbortController>();
 
 async function handleChatRequest(message: any, sender: chrome.runtime.MessageSender): Promise<unknown> {
-  const { conversationId, modelConfigId, messages, thinkMode, thinkRounds } = message;
+  const { conversationId, modelConfigId, messages, thinkMode, thinkRounds, attachmentStorageKey } = message;
+
+  // 从 storage.session 还原图片 dataUrl（占位 id → 真实 base64），取完即删
+  let resolvedMessages: ChatMessageInput[] = messages;
+  if (attachmentStorageKey) {
+    try {
+      const result = (await chrome.storage.session.get(attachmentStorageKey)) as unknown as {
+        [key: string]: Array<{ id: string; dataUrl: string }> | undefined;
+      };
+      const imageData: Array<{ id: string; dataUrl: string }> = result[attachmentStorageKey] || [];
+      const idToUrl = new Map(imageData.map((a) => [a.id, a.dataUrl]));
+      if (idToUrl.size > 0) {
+        resolvedMessages = messages.map((m: ChatMessageInput) => {
+          if (typeof m.content === 'string') return m;
+          const replaced: ContentPart[] = m.content.map((p) =>
+            p.type === 'image_url' && idToUrl.has(p.image_url.url)
+              ? { type: 'image_url', image_url: { url: idToUrl.get(p.image_url.url)! } }
+              : p,
+          );
+          return { ...m, content: replaced };
+        });
+      }
+    } catch {
+      // ignore restore failure
+    }
+    // 无论成功失败都清理 session key，释放配额
+    chrome.storage.session.remove(attachmentStorageKey).catch(() => {});
+  }
 
   // Look up model config - we need to import the db layer
   // Since service worker can't use sql.js directly, we fetch model config from side panel
@@ -167,7 +194,7 @@ async function handleChatRequest(message: any, sender: chrome.runtime.MessageSen
     // Execute multi-round thinking
     handleThinkingChat({
       conversationId,
-      messages,
+      messages: resolvedMessages,
       modelConfig,
       thinkRounds,
       abortController,
@@ -177,7 +204,7 @@ async function handleChatRequest(message: any, sender: chrome.runtime.MessageSen
     // Original logic: direct answer
     handleDirectChat({
       conversationId,
-      messages,
+      messages: resolvedMessages,
       modelConfig,
       abortController,
       sendToSender,
@@ -434,9 +461,7 @@ function buildThinkMessages(
 
   // Add the current user message with thinking instruction
   const lastUserMessage = originalMessages[originalMessages.length - 1];
-  messages.push({
-    role: 'user',
-    content: `你现在处于"思考阶段"（第${currentRound}轮），请仅对这个用户的原始问题进行推理分析，不要给出最终答案。要求：
+  const thinkInstruction = `你现在处于"思考阶段"（第${currentRound}轮），请仅对这个用户的原始问题进行推理分析，不要给出最终答案。要求：
 1. 分析问题的核心要点和关键信息
 2. 列出可能的解决思路或方案
 3. 评估每种方案的优缺点
@@ -444,9 +469,19 @@ function buildThinkMessages(
 
 注意：不要给出最终答案，只展示你的推理和思考过程。最终答案将在后续的"回答阶段"中给出。
 
-用户的原始问题：
-${lastUserMessage.content}`,
-  });
+用户的原始问题：`;
+
+  if (typeof lastUserMessage.content === 'string') {
+    // 纯文本：与原逻辑完全一致（零回归）
+    messages.push({
+      role: 'user',
+      content: `${thinkInstruction}\n${lastUserMessage.content}`,
+    });
+  } else {
+    // 多模态 content（含图片）：前置思考指令 text part，保留原 image parts
+    const parts: ContentPart[] = [{ type: 'text', text: `${thinkInstruction}\n` }, ...lastUserMessage.content];
+    messages.push({ role: 'user', content: parts });
+  }
 
   return messages;
 }
@@ -842,12 +877,13 @@ async function summarizeLongContent(
   conversationId: number,
 ): Promise<ChatMessageInput[] | null> {
   const systemMsgIndex = messages.findIndex(
-    (m) => m.role === 'system' && m.content.includes('<page_content>'),
+    (m) => m.role === 'system' && typeof m.content === 'string' && m.content.includes('<page_content>'),
   );
   if (systemMsgIndex === -1) return null;
 
   const systemMsg = messages[systemMsgIndex];
-  let newContent = systemMsg.content;
+  // findIndex 守卫已确保该 system 消息的 content 是 string，此处断言避免联合类型报错
+  let newContent = systemMsg.content as string;
   let changed = false;
 
   // 估算需要摘要的步数（正文块数 + 评论组数），用于进度显示

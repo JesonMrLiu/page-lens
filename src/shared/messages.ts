@@ -17,6 +17,7 @@ export interface ChatRequestMessage {
   conversationId: number;
   modelConfigId: number;
   messages: ChatMessageInput[];
+  attachmentStorageKey?: string;
   thinkMode?: ThinkMode;
   thinkRounds?: number;
 }

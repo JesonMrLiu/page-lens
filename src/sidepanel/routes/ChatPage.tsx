@@ -12,7 +12,7 @@ import { useToast } from '@/sidepanel/components/shared/Toast';
 import { MSG_TYPES } from '@/shared/constants';
 import { extractDomain } from '@/shared/utils';
 import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
-import type { ThinkMode } from '@/shared/types';
+import type { ThinkMode, Attachment } from '@/shared/types';
 
 export function ChatPage() {
   const chat = useChat();
@@ -104,7 +104,7 @@ export function ChatPage() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSend = useCallback(async (content: string) => {
+  const handleSend = useCallback(async (content: string, attachments: Attachment[] = []) => {
     setSending(true);
     try {
       let pageContext: string | null = null;
@@ -136,7 +136,7 @@ export function ChatPage() {
         // Silently ignore
       }
 
-      await chat.sendMessage(content, pageContext, thinkMode, comments, pageTitle);
+      await chat.sendMessage(content, pageContext, thinkMode, comments, pageTitle, attachments);
     } catch (err: any) {
       showToast('error', err.message || t('chat.sendFailed'));
     } finally {

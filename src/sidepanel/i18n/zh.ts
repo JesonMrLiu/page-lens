@@ -20,6 +20,9 @@ const zh: Record<string, string> = {
   'chatInput.placeholder': '输入消息... (Enter 发送, Shift+Enter 换行)',
   'chatInput.stopGenerating': '停止生成',
   'chatInput.send': '发送',
+  'chatInput.attach': '上传图片或文件',
+  'chatInput.removeAttachment': '移除',
+  'chatInput.tooManyImages': '单条消息最多 {count} 张图片',
 
   // === ChatMessage ===
   'chatMessage.alreadySaved': '该消息已保存为笔记',
@@ -64,6 +67,7 @@ const zh: Record<string, string> = {
   'modelConfig.confirmDelete': '确认删除',
   'modelConfig.cancel': '取消',
   'modelConfig.delete': '删除',
+  'modelConfig.cannotDeleteDefault': '默认模型不可删除，请先将其他模型设为默认',
 
   // === ModelConfigForm ===
   'modelForm.connectionSuccess': '连接成功！',

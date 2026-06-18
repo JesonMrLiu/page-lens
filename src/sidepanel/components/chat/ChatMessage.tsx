@@ -1,4 +1,4 @@
-import { Bot, User, Copy, Check, Bookmark, Loader2 } from 'lucide-react';
+import { Bot, User, Copy, Check, Bookmark, Loader2, FileText } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import type { Message } from '@/shared/types';
 import { formatDate } from '@/shared/utils';
@@ -93,7 +93,32 @@ export function ChatMessage({ message, conversationTitle }: ChatMessageProps) {
           }`}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            <div className="space-y-1">
+              {message.attachments && message.attachments.length > 0 && (
+                <div className="flex flex-wrap gap-1 justify-end">
+                  {message.attachments.map((a) =>
+                    a.kind === 'image' && a.dataUrl ? (
+                      <img
+                        key={a.id}
+                        src={a.dataUrl}
+                        alt={a.name}
+                        className="max-h-24 max-w-32 rounded border border-white/30 object-cover"
+                      />
+                    ) : (
+                      <span
+                        key={a.id}
+                        className="inline-flex items-center gap-1 text-[10px] bg-white/20 rounded px-1.5 py-0.5"
+                      >
+                        <FileText size={10} /> {a.name}
+                      </span>
+                    ),
+                  )}
+                </div>
+              )}
+              {message.content.trim() && (
+                <p className="whitespace-pre-wrap break-words">{message.content}</p>
+              )}
+            </div>
           ) : (
             <MarkdownRenderer
               content={message.content}

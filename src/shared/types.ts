@@ -70,6 +70,22 @@ export interface Conversation {
   updated_at: string;
 }
 
+// ===================== Multimodal Content Parts =====================
+export interface TextPart { type: 'text'; text: string; }
+export interface ImagePart { type: 'image_url'; image_url: { url: string }; }
+export type ContentPart = TextPart | ImagePart;
+
+// ===================== Attachment (UI 内存态，repo 不写入 DB) =====================
+export interface Attachment {
+  id: string;
+  kind: 'image' | 'file';
+  name: string;
+  mime: string;
+  dataUrl?: string;      // 图片：压缩后的 base64 data URL
+  textContent?: string;  // 文本附件：解析后的文本内容
+  size?: number;         // 原始字节数，用于 UI 显示
+}
+
 // ===================== Message =====================
 export interface Message {
   id: number;
@@ -79,11 +95,12 @@ export interface Message {
   thinking_process?: ThinkingProcess[]; // 思考过程记录
   model_config_id: number | null;
   created_at: string;
+  attachments?: Attachment[]; // 仅内存态，repo 不写入；用于当次对话 UI 显示附件
 }
 
 export interface ChatMessageInput {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | ContentPart[];
 }
 
 // ===================== Note =====================

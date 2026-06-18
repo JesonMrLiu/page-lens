@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { conversationRepo, messageRepo } from '@/db/repositories/conversation.repo';
 import { normalizePageUrl } from '@/shared/utils';
 import { MSG_TYPES } from '@/shared/constants';
-import type { Conversation, Message, ThinkMode, ThinkingProcess } from '@/shared/types';
+import type { Conversation, Message, ThinkMode, ThinkingProcess, Attachment } from '@/shared/types';
 
 interface ChatState {
   conversations: Conversation[];
@@ -27,7 +27,7 @@ interface ChatState {
   selectConversation: (id: number) => void;
   setModel: (modelId: number) => void;
   setThinkMode: (mode: ThinkMode) => void;
-  addMessage: (role: Message['role'], content: string, modelConfigId?: number, thinkingProcess?: ThinkingProcess[]) => Promise<Message>;
+  addMessage: (role: Message['role'], content: string, modelConfigId?: number, thinkingProcess?: ThinkingProcess[], attachments?: Attachment[]) => Promise<Message>;
   startStreaming: () => void;
   appendStreamContent: (chunk: string) => void;
   endStreaming: (fullContent: string, modelConfigId?: number, thinkingProcess?: ThinkingProcess[]) => Promise<Message>;
@@ -94,7 +94,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ thinkMode: mode });
   },
 
-  addMessage: async (role, content, modelConfigId, thinkingProcess) => {
+  addMessage: async (role, content, modelConfigId, thinkingProcess, attachments) => {
     const { currentConversationId } = get();
     if (!currentConversationId) {
       throw new Error('No active conversation');
@@ -106,10 +106,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       modelConfigId,
       thinkingProcess,
     );
+    // 附件仅挂内存态供当次对话 UI 显示，不写入 DB（repo.create 未接收 attachments）
+    const messageWithAttachments: Message =
+      attachments && attachments.length > 0 ? { ...message, attachments } : message;
     set((state) => ({
-      messages: [...state.messages, message],
+      messages: [...state.messages, messageWithAttachments],
     }));
-    return message;
+    return messageWithAttachments;
   },
 
   startStreaming: () => {

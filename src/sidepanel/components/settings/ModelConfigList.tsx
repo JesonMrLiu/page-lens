@@ -145,6 +145,14 @@ export function ModelConfigList({ models, onAdd, onUpdate, onDelete, onSetDefaul
                       <X size={14} />
                     </button>
                   </div>
+                ) : model.is_default ? (
+                  <button
+                    disabled
+                    className="p-1 text-gray-300 dark:text-gray-600 rounded cursor-not-allowed"
+                    title={t('modelConfig.cannotDeleteDefault')}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 ) : (
                   <button
                     onClick={() => setDeletingId(model.id)}

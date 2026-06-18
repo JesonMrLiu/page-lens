@@ -96,3 +96,7 @@ export const STORAGE_KEYS = {
 
 // ===================== DB Constants =====================
 export const CURRENT_SCHEMA_VERSION = 1;
+
+// ===================== Conversation TTL =====================
+/** 会话过期时长（毫秒）：最后一条消息时间超过此时长的会话在启动时自动清理 */
+export const CONVERSATION_TTL_MS = 24 * 60 * 60 * 1000;

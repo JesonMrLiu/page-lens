@@ -70,6 +70,10 @@ export const modelConfigRepo = {
     const db = getDb();
     const idx = db.modelConfigs.findIndex(m => m.id === id);
     if (idx === -1) return false;
+    // 默认模型不允许删除：需先将其他模型设为默认，使其变为非默认后才可删除
+    if (db.modelConfigs[idx].is_default) {
+      throw new Error('Cannot delete the default model; set another model as default first.');
+    }
     db.modelConfigs.splice(idx, 1);
     await saveDatabase();
     return true;

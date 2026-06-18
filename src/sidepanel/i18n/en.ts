@@ -20,6 +20,9 @@ const en: Record<string, string> = {
   'chatInput.placeholder': 'Type a message... (Enter to send, Shift+Enter for new line)',
   'chatInput.stopGenerating': 'Stop generating',
   'chatInput.send': 'Send',
+  'chatInput.attach': 'Attach image or file',
+  'chatInput.removeAttachment': 'Remove',
+  'chatInput.tooManyImages': 'Up to {count} images per message',
 
   // === ChatMessage ===
   'chatMessage.alreadySaved': 'This message has already been saved as a note',
@@ -64,6 +67,7 @@ const en: Record<string, string> = {
   'modelConfig.confirmDelete': 'Confirm delete',
   'modelConfig.cancel': 'Cancel',
   'modelConfig.delete': 'Delete',
+  'modelConfig.cannotDeleteDefault': 'Cannot delete the default model. Set another model as default first.',
 
   // === ModelConfigForm ===
   'modelForm.connectionSuccess': 'Connection successful!',

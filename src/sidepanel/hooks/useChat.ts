@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useChatStore } from '@/sidepanel/stores/chat-store';
 import { modelConfigRepo } from '@/db/repositories/model-config.repo';
 import { MSG_TYPES, STORAGE_KEYS, DEFAULT_NORMAL_ROUNDS, DEFAULT_DEEP_ROUNDS } from '@/shared/constants';
-import type { ChatMessageInput, ThinkMode, CommentItem } from '@/shared/types';
+import type { ChatMessageInput, ThinkMode, CommentItem, Attachment, ContentPart } from '@/shared/types';
 
 /**
  * Hook for managing chat interactions with AI models.
@@ -29,7 +29,7 @@ export function useChat() {
     });
   }, []);
 
-  const sendMessage = useCallback(async (content: string, pageContext?: string | null, thinkModeOverride?: ThinkMode, comments?: CommentItem[] | null, title?: string | null) => {
+  const sendMessage = useCallback(async (content: string, pageContext?: string | null, thinkModeOverride?: ThinkMode, comments?: CommentItem[] | null, title?: string | null, attachments?: Attachment[]) => {
     const { currentConversationId, selectedModelId } = store;
     const thinkMode = thinkModeOverride ?? store.thinkMode;
 
@@ -106,11 +106,34 @@ export function useChat() {
       }));
     messages.push(...historyMessages);
 
-    // Add the current user message
-    messages.push({ role: 'user', content });
+    // 构造当前用户消息：图片走多模态 content parts（image_url.url 用附件 id 占位，由 background 还原）；
+    // 文本附件内容前置拼进文本；无图片附件时保持纯字符串，与现状完全一致（零回归）。
+    const images = (attachments ?? []).filter((a) => a.kind === 'image' && a.dataUrl);
+    const textFiles = (attachments ?? []).filter((a) => a.kind === 'file' && a.textContent != null);
 
-    // Now persist the user message to DB (updates store for future turns)
-    await store.addMessage('user', content);
+    let fullText = content;
+    if (textFiles.length > 0) {
+      const fileText = textFiles.map((f) => `[文件 ${f.name}]\n${f.textContent}`).join('\n\n');
+      fullText = `${fileText}\n\n${content}`;
+    }
+
+    const imageParts: ContentPart[] = images.map((a) => ({ type: 'image_url', image_url: { url: a.id } }));
+    const currentUserContent: string | ContentPart[] =
+      images.length > 0 ? [{ type: 'text', text: fullText }, ...imageParts] : fullText;
+
+    messages.push({ role: 'user', content: currentUserContent });
+
+    // 图片 dataUrl 经 chrome.storage.session 中转，避免 base64 撑大 messaging payload
+    let attachmentStorageKey: string | undefined;
+    if (images.length > 0) {
+      attachmentStorageKey = `chat_img_${convId}_${Date.now()}`;
+      await chrome.storage.session.set({
+        [attachmentStorageKey]: images.map((a) => ({ id: a.id, dataUrl: a.dataUrl })),
+      });
+    }
+
+    // 持久化仅存用户输入的纯文本；附件挂在内存态供当次对话 UI 显示（不写 DB）
+    await store.addMessage('user', content, undefined, undefined, attachments);
 
     // Start streaming
     store.startStreaming();
@@ -188,6 +211,7 @@ export function useChat() {
         conversationId: convId,
         modelConfigId: model.id,
         messages,
+        attachmentStorageKey,
         modelConfig: {
           baseUrl: model.base_url,
           apiKey: model.api_key,

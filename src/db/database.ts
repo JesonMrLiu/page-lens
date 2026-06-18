@@ -1,5 +1,5 @@
 import type { ModelConfig, FeishuConfig, Conversation, Message, Note } from '@/shared/types';
-import { STORAGE_KEYS } from '@/shared/constants';
+import { STORAGE_KEYS, CONVERSATION_TTL_MS } from '@/shared/constants';
 
 /**
  * Application data stored in chrome.storage.local
@@ -61,6 +61,20 @@ export async function initDatabase(): Promise<AppData> {
   } else {
     cachedData = getDefaultData();
     await saveDatabase();
+  }
+
+  // 清理过期会话：最后一条消息时间（updated_at）超过 CONVERSATION_TTL_MS 的会话及其消息在启动时删除。
+  // 笔记（notes）为独立内容副本，不受影响。
+  const threshold = Date.now() - CONVERSATION_TTL_MS;
+  const expired = cachedData.conversations.filter(
+    (c) => new Date((c.updated_at || c.created_at) + 'Z').getTime() < threshold,
+  );
+  if (expired.length > 0) {
+    const expiredIds = new Set(expired.map((c) => c.id));
+    cachedData.conversations = cachedData.conversations.filter((c) => !expiredIds.has(c.id));
+    cachedData.messages = cachedData.messages.filter((m) => !expiredIds.has(m.conversation_id));
+    await saveDatabase();
+    console.log(`[PageLens] Pruned ${expired.length} expired conversations (>24h)`);
   }
 
   console.log('[PageLens] Data store initialized');
