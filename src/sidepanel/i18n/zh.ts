@@ -115,6 +115,25 @@ const zh: Record<string, string> = {
   'feishu.testConnection': '测试连接',
   'feishu.goToOpenPlatform': '前往飞书开放平台创建应用',
 
+  // === NotionConfigForm ===
+  'notion.title': 'Notion 应用配置',
+  'notion.configured': '已配置',
+  'notion.tokenLabel': 'Integration Token',
+  'notion.tokenPlaceholder': 'secret_xxxxxxxxxxxx',
+  'notion.tokenHint': '在 Notion 创建一个 Internal Integration，复制其 Internal Integration Secret 填入此处。',
+  'notion.parentPageLabel': '目标页面 ID（可选）',
+  'notion.parentPagePlaceholder': '同步内容将作为该页面的子页面',
+  'notion.parentPageHint': '同步时若笔记尚未创建过 Notion 页面，将在该目标页面下新建子页面；目标页面需已在 Notion 中连接本 Integration。',
+  'notion.connectTip': '重要：请在 Notion 目标页面右上角「···」→「Connect to」中选择并添加本 Integration，否则会提示权限不足（403）。',
+  'notion.save': '保存',
+  'notion.saveSuccess': '保存成功！',
+  'notion.saveFailed': '保存失败',
+  'notion.testConnection': '测试连接',
+  'notion.connectionSuccessWithPage': '连接成功！Token 有效且目标页面可访问。',
+  'notion.connectionSuccessNoPage': '连接成功！Token 认证通过。',
+  'notion.connectionFailed': '连接失败',
+  'notion.goToIntegrations': '前往 Notion 创建 Integration',
+
   // === NotesPage ===
   'notes.filterAll': '全部',
   'notes.filterSummary': '总结',
@@ -123,6 +142,9 @@ const zh: Record<string, string> = {
   'notes.deleted': '笔记已删除',
   'notes.exportedToFeishu': '已导出到飞书',
   'notes.exportFailed': '导出失败',
+  'notes.notionCreated': '已同步到 Notion',
+  'notes.notionUpdated': 'Notion 页面已更新',
+  'notes.notionSyncFailed': '同步到 Notion 失败',
   'notes.feishuDocDeleted': '飞书文档已被删除，可重新导出',
   'notes.emptyTitle': '暂无笔记',
   'notes.emptyDesc': '在聊天中保存 AI 回复，或总结页面内容后可保存为笔记',
@@ -147,6 +169,9 @@ const zh: Record<string, string> = {
   'noteDetail.copy': '复制',
   'noteDetail.openFeishuDoc': '打开飞书文档',
   'noteDetail.exportToFeishu': '导出到飞书',
+  'noteDetail.syncToNotion': '同步到 Notion',
+  'noteDetail.resyncNotion': '重新同步',
+  'noteDetail.openNotionPage': '打开 Notion',
   'noteDetail.delete': '删除',
 
   // === CodeBlock ===
@@ -157,6 +182,7 @@ const zh: Record<string, string> = {
   // === SettingsPage ===
   'settings.tabAiModels': 'AI 模型',
   'settings.tabFeishu': '飞书',
+  'settings.tabNotion': 'Notion',
   'settings.tabGeneral': '通用',
   'settings.generalTitle': '通用设置',
   'settings.language': '界面语言',

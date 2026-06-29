@@ -58,6 +58,8 @@ export const noteRepo = {
       message_id: note.message_id ?? null,
       feishu_doc_id: '',
       feishu_doc_url: '',
+      notion_page_id: '',
+      notion_page_url: '',
       tags: note.tags ?? '',
       created_at: now(),
       updated_at: now(),
@@ -99,6 +101,16 @@ export const noteRepo = {
     if (item) {
       item.feishu_doc_id = '';
       item.feishu_doc_url = '';
+      item.updated_at = now();
+      await saveDatabase();
+    }
+  },
+
+  async updateNotionExport(id: number, pageId: string, pageUrl: string): Promise<void> {
+    const item = getDb().notes.find(n => n.id === id);
+    if (item) {
+      item.notion_page_id = pageId;
+      item.notion_page_url = pageUrl;
       item.updated_at = now();
       await saveDatabase();
     }

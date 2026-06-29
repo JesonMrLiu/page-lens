@@ -3,6 +3,7 @@ import type { ExtensionMessage } from '@/shared/messages';
 import type { ChatMessageInput, ContentPart } from '@/shared/types';
 import { testConnection, streamChatCompletion, streamThinkingRound, chatCompletion } from './ai-client';
 import { testFeishuConnection, createFeishuDocument, checkFeishuDocExists } from './feishu-client';
+import { testNotionConnection, syncNotionPage } from './notion-client';
 import { extractFromActiveTab } from './page-extractor';
 
 /**
@@ -53,6 +54,18 @@ export function setupMessageRouter(): void {
 
         case MSG_TYPES.CHECK_FEISHU_DOC:
           handleCheckFeishuDoc(message)
+            .then(sendResponse)
+            .catch((err) => sendResponse({ error: err.message }));
+          return true;
+
+        case MSG_TYPES.TEST_NOTION_CONNECTION:
+          handleTestNotionConnection(message)
+            .then(sendResponse)
+            .catch((err) => sendResponse({ error: err.message }));
+          return true;
+
+        case MSG_TYPES.SYNC_TO_NOTION:
+          handleSyncToNotion(message)
             .then(sendResponse)
             .catch((err) => sendResponse({ error: err.message }));
           return true;
@@ -600,6 +613,48 @@ async function handleCheckFeishuDoc(message: any): Promise<unknown> {
       exists: false,
       deleted: false,
       error: err.message || '验证文档失败',
+    };
+  }
+}
+
+async function handleTestNotionConnection(message: any): Promise<unknown> {
+  const { token, parentPageId } = message;
+  if (!token) {
+    return { type: MSG_TYPES.TEST_NOTION_RESULT, success: false, error: '缺少 Notion Integration Token' };
+  }
+  const result = await testNotionConnection(token, parentPageId || undefined);
+  return { type: MSG_TYPES.TEST_NOTION_RESULT, ...result };
+}
+
+async function handleSyncToNotion(message: any): Promise<unknown> {
+  const { title, content, notionPageId, notionConfig } = message;
+  if (!notionConfig || !notionConfig.token) {
+    return { type: MSG_TYPES.SYNC_TO_NOTION_RESULT, success: false, error: 'Notion 未配置' };
+  }
+  if (!notionConfig.parentPageId && !notionPageId) {
+    return { type: MSG_TYPES.SYNC_TO_NOTION_RESULT, success: false, error: '请在设置中配置 Notion 目标页面 ID' };
+  }
+
+  try {
+    const result = await syncNotionPage({
+      token: notionConfig.token,
+      parentPageId: notionConfig.parentPageId,
+      title,
+      content,
+      notionPageId: notionPageId || undefined,
+    });
+    return {
+      type: MSG_TYPES.SYNC_TO_NOTION_RESULT,
+      success: true,
+      pageId: result.pageId,
+      pageUrl: result.pageUrl,
+      mode: result.mode,
+    };
+  } catch (err: any) {
+    return {
+      type: MSG_TYPES.SYNC_TO_NOTION_RESULT,
+      success: false,
+      error: err.message || '同步到 Notion 失败',
     };
   }
 }

@@ -115,6 +115,25 @@ const en: Record<string, string> = {
   'feishu.testConnection': 'Test connection',
   'feishu.goToOpenPlatform': 'Go to Feishu Open Platform to create an app',
 
+  // === NotionConfigForm ===
+  'notion.title': 'Notion Integration Configuration',
+  'notion.configured': 'Configured',
+  'notion.tokenLabel': 'Integration Token',
+  'notion.tokenPlaceholder': 'secret_xxxxxxxxxxxx',
+  'notion.tokenHint': 'Create an Internal Integration in Notion and paste its Internal Integration Secret here.',
+  'notion.parentPageLabel': 'Target Page ID (optional)',
+  'notion.parentPagePlaceholder': 'Synced content will become a sub-page of this page',
+  'notion.parentPageHint': 'On first sync, a new sub-page is created under this target page. The target page must have this Integration connected in Notion.',
+  'notion.connectTip': 'Important: open the target Notion page, click "···" → "Connect to" and add this Integration, otherwise you will get a 403 permission error.',
+  'notion.save': 'Save',
+  'notion.saveSuccess': 'Saved successfully!',
+  'notion.saveFailed': 'Save failed',
+  'notion.testConnection': 'Test connection',
+  'notion.connectionSuccessWithPage': 'Connection successful! Token is valid and target page is accessible.',
+  'notion.connectionSuccessNoPage': 'Connection successful! Notion authentication passed.',
+  'notion.connectionFailed': 'Connection failed',
+  'notion.goToIntegrations': 'Go to Notion to create an Integration',
+
   // === NotesPage ===
   'notes.filterAll': 'All',
   'notes.filterSummary': 'Summary',
@@ -123,6 +142,9 @@ const en: Record<string, string> = {
   'notes.deleted': 'Note deleted',
   'notes.exportedToFeishu': 'Exported to Feishu',
   'notes.exportFailed': 'Export failed',
+  'notes.notionCreated': 'Synced to Notion',
+  'notes.notionUpdated': 'Notion page updated',
+  'notes.notionSyncFailed': 'Sync to Notion failed',
   'notes.feishuDocDeleted': 'The Feishu document was deleted. You can re-export it.',
   'notes.emptyTitle': 'No notes yet',
   'notes.emptyDesc': 'Save AI replies in chat, or save page summaries as notes',
@@ -147,6 +169,9 @@ const en: Record<string, string> = {
   'noteDetail.copy': 'Copy',
   'noteDetail.openFeishuDoc': 'Open Feishu Document',
   'noteDetail.exportToFeishu': 'Export to Feishu',
+  'noteDetail.syncToNotion': 'Sync to Notion',
+  'noteDetail.resyncNotion': 'Re-sync',
+  'noteDetail.openNotionPage': 'Open Notion',
   'noteDetail.delete': 'Delete',
 
   // === CodeBlock ===
@@ -157,6 +182,7 @@ const en: Record<string, string> = {
   // === SettingsPage ===
   'settings.tabAiModels': 'AI Models',
   'settings.tabFeishu': 'Feishu',
+  'settings.tabNotion': 'Notion',
   'settings.tabGeneral': 'General',
   'settings.generalTitle': 'General Settings',
   'settings.language': 'Language',

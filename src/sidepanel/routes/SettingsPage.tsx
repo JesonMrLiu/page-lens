@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Bot, Feather, Globe, Brain } from 'lucide-react';
+import { Bot, Feather, Globe, Brain, FileText } from 'lucide-react';
 import { ModelConfigList } from '@/sidepanel/components/settings/ModelConfigList';
 import { FeishuConfigForm } from '@/sidepanel/components/settings/FeishuConfigForm';
+import { NotionConfigForm } from '@/sidepanel/components/settings/NotionConfigForm';
 import { useModels } from '@/sidepanel/hooks/useModels';
 import { STORAGE_KEYS, MAX_THINK_ROUNDS, DEFAULT_NORMAL_ROUNDS, DEFAULT_DEEP_ROUNDS } from '@/shared/constants';
 import { useSettingsStore } from '@/sidepanel/stores/settings-store';
 import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
 import type { CreateModelConfig, UpdateModelConfig } from '@/shared/types';
 
-type SettingsTab = 'ai-models' | 'feishu' | 'general';
+type SettingsTab = 'ai-models' | 'feishu' | 'notion' | 'general';
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>('ai-models');
@@ -18,6 +19,7 @@ export function SettingsPage() {
   const tabs: { key: SettingsTab; labelKey: string; icon: React.ReactNode }[] = [
     { key: 'ai-models', labelKey: 'settings.tabAiModels', icon: <Bot size={14} /> },
     { key: 'feishu', labelKey: 'settings.tabFeishu', icon: <Feather size={14} /> },
+    { key: 'notion', labelKey: 'settings.tabNotion', icon: <FileText size={14} /> },
     { key: 'general', labelKey: 'settings.tabGeneral', icon: <Globe size={14} /> },
   ];
 
@@ -70,6 +72,7 @@ export function SettingsPage() {
           />
         )}
         {activeTab === 'feishu' && <FeishuConfigForm />}
+        {activeTab === 'notion' && <NotionConfigForm />}
         {activeTab === 'general' && <GeneralTab />}
       </div>
     </div>

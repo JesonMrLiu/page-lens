@@ -9,7 +9,7 @@ import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
 import type { Note } from '@/shared/types';
 
 export function NotesPage() {
-  const { notes, filter, setFilter, deleteNote, exportToFeishu, updateNote, checkFeishuDoc } = useNotes();
+  const { notes, filter, setFilter, deleteNote, exportToFeishu, updateNote, checkFeishuDoc, syncToNotion } = useNotes();
   const { showToast } = useToast();
   const { t } = useTranslation();
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -67,6 +67,20 @@ export function NotesPage() {
     return result;
   };
 
+  const handleSyncNotion = async (id: number) => {
+    const result = await syncToNotion(id);
+    if (result.success) {
+      const msg = result.mode === 'updated' ? t('notes.notionUpdated') : t('notes.notionCreated');
+      showToast('success', msg);
+      if (selectedNote?.id === id) {
+        setSelectedNote({ ...selectedNote, notion_page_url: result.pageUrl ?? '', notion_page_id: selectedNote.notion_page_id });
+      }
+    } else {
+      showToast('error', result.error ?? t('notes.notionSyncFailed'));
+    }
+    return result;
+  };
+
   if (selectedNote) {
     return (
       <NoteDetail
@@ -76,6 +90,7 @@ export function NotesPage() {
         onExportToFeishu={handleExport}
         onUpdateTitle={handleUpdateTitle}
         onCheckFeishuDoc={handleCheckFeishuDoc}
+        onSyncToNotion={handleSyncNotion}
       />
     );
   }

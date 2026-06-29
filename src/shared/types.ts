@@ -59,6 +59,26 @@ export interface CreateFeishuConfig {
   is_active?: number;
 }
 
+// ===================== Notion Config =====================
+export interface NotionConfig {
+  id: number;
+  name: string;
+  /** Internal Integration Token（secret_xxx） */
+  token: string;
+  /** 同步目标父页面 id（32 位十六进制字符串） */
+  parent_page_id: string;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateNotionConfig {
+  name?: string;
+  token: string;
+  parent_page_id?: string;
+  is_active?: number;
+}
+
 // ===================== Conversation =====================
 export interface Conversation {
   id: number;
@@ -114,6 +134,8 @@ export interface Note {
   message_id: number | null;
   feishu_doc_id: string;
   feishu_doc_url: string;
+  notion_page_id: string;
+  notion_page_url: string;
   tags: string;
   created_at: string;
   updated_at: string;

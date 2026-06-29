@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { noteRepo, getEffectiveSourceUrl } from '@/db/repositories/note.repo';
 import { feishuConfigRepo } from '@/db/repositories/feishu-config.repo';
+import { notionConfigRepo } from '@/db/repositories/notion-config.repo';
 import type { Note } from '@/shared/types';
 import { MSG_TYPES } from '@/shared/constants';
 import { renderAllMermaidBlocks } from '@/sidepanel/utils/mermaid-renderer';
@@ -16,6 +17,7 @@ interface UseNotesReturn {
   deleteNote: (id: number) => Promise<boolean>;
   exportToFeishu: (noteId: number) => Promise<{ success: boolean; docUrl?: string; error?: string; skippedCount?: number }>;
   checkFeishuDoc: (noteId: number) => Promise<{ exists: boolean; deleted?: boolean; error?: string }>;
+  syncToNotion: (noteId: number) => Promise<{ success: boolean; pageUrl?: string; mode?: 'created' | 'updated'; error?: string }>;
 }
 
 export function useNotes(): UseNotesReturn {
@@ -164,6 +166,52 @@ export function useNotes(): UseNotesReturn {
     }
   }, [refresh]);
 
+  const syncToNotion = useCallback(async (noteId: number): Promise<{ success: boolean; pageUrl?: string; mode?: 'created' | 'updated'; error?: string }> => {
+    const note = noteRepo.getById(noteId);
+    if (!note) {
+      return { success: false, error: '笔记不存在' };
+    }
+
+    const notionConfig = notionConfigRepo.getActive();
+    if (!notionConfig) {
+      return { success: false, error: '请先在设置中配置 Notion 应用' };
+    }
+
+    try {
+      // 同步内容开头附上原文链接（Notion 侧渲染为引用块）
+      const sourceUrl = getEffectiveSourceUrl(note);
+      const exportContent = sourceUrl
+        ? `> 原文链接：${sourceUrl}\n\n${note.content}`
+        : note.content;
+
+      const response = await chrome.runtime.sendMessage({
+        type: MSG_TYPES.SYNC_TO_NOTION,
+        noteId,
+        title: note.title,
+        content: exportContent,
+        notionPageId: note.notion_page_id || undefined,
+        notionConfig: {
+          token: notionConfig.token,
+          parentPageId: notionConfig.parent_page_id,
+        },
+      });
+
+      if (response.success && response.pageId) {
+        await noteRepo.updateNotionExport(noteId, response.pageId, response.pageUrl);
+        refresh();
+      }
+
+      return {
+        success: response.success,
+        pageUrl: response.pageUrl,
+        mode: response.mode,
+        error: response.error,
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message || '同步到 Notion 失败' };
+    }
+  }, [refresh]);
+
   return {
     notes,
     isLoading,
@@ -175,5 +223,6 @@ export function useNotes(): UseNotesReturn {
     deleteNote,
     exportToFeishu,
     checkFeishuDoc,
+    syncToNotion,
   };
 }

@@ -1,4 +1,4 @@
-import type { ModelConfig, FeishuConfig, Conversation, Message, Note } from '@/shared/types';
+import type { ModelConfig, FeishuConfig, NotionConfig, Conversation, Message, Note } from '@/shared/types';
 import { STORAGE_KEYS, CONVERSATION_TTL_MS } from '@/shared/constants';
 
 /**
@@ -7,6 +7,7 @@ import { STORAGE_KEYS, CONVERSATION_TTL_MS } from '@/shared/constants';
 export interface AppData {
   modelConfigs: ModelConfig[];
   feishuConfigs: FeishuConfig[];
+  notionConfigs: NotionConfig[];
   conversations: Conversation[];
   messages: Message[];
   notes: Note[];
@@ -21,6 +22,7 @@ function getDefaultData(): AppData {
   return {
     modelConfigs: [],
     feishuConfigs: [],
+    notionConfigs: [],
     conversations: [],
     messages: [],
     notes: [],
@@ -42,6 +44,7 @@ export async function initDatabase(): Promise<AppData> {
     // 数据迁移：确保所有字段都存在（兼容旧版本数据）
     if (!Array.isArray(cachedData.modelConfigs)) cachedData.modelConfigs = [];
     if (!Array.isArray(cachedData.feishuConfigs)) cachedData.feishuConfigs = [];
+    if (!Array.isArray(cachedData.notionConfigs)) cachedData.notionConfigs = [];
     if (!Array.isArray(cachedData.conversations)) cachedData.conversations = [];
     if (!Array.isArray(cachedData.messages)) cachedData.messages = [];
     if (!Array.isArray(cachedData.notes)) cachedData.notes = [];
@@ -50,6 +53,13 @@ export async function initDatabase(): Promise<AppData> {
     if (Array.isArray(cachedData.notes)) {
       for (const note of cachedData.notes) {
         if (note.message_id === undefined) note.message_id = null;
+      }
+    }
+    // 迁移 notes：为旧数据补充 notion 同步字段
+    if (Array.isArray(cachedData.notes)) {
+      for (const note of cachedData.notes) {
+        if (note.notion_page_id === undefined) note.notion_page_id = '';
+        if (note.notion_page_url === undefined) note.notion_page_url = '';
       }
     }
     // 迁移 modelConfigs：为旧数据补充 full_url 字段

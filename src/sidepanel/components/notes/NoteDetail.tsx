@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Copy, Check, Trash2, FileText, Pencil, X, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Copy, Check, Trash2, FileText, Pencil, X, Sparkles, Loader2, BookOpen } from 'lucide-react';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { Note } from '@/shared/types';
 import { MSG_TYPES } from '@/shared/constants';
@@ -16,11 +16,13 @@ interface NoteDetailProps {
   onExportToFeishu: (id: number) => Promise<{ success: boolean; docUrl?: string; error?: string }>;
   onUpdateTitle: (id: number, title: string) => Promise<void>;
   onCheckFeishuDoc: (id: number) => Promise<{ exists: boolean; deleted?: boolean }>;
+  onSyncToNotion: (id: number) => Promise<{ success: boolean; pageUrl?: string; mode?: 'created' | 'updated'; error?: string }>;
 }
 
-export function NoteDetail({ note, onBack, onDelete, onExportToFeishu, onUpdateTitle, onCheckFeishuDoc }: NoteDetailProps) {
+export function NoteDetail({ note, onBack, onDelete, onExportToFeishu, onUpdateTitle, onCheckFeishuDoc, onSyncToNotion }: NoteDetailProps) {
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [syncingNotion, setSyncingNotion] = useState(false);
   const [checking, setChecking] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState(note.title);
@@ -70,6 +72,16 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu, onUpdateT
     setExporting(true);
     await onExportToFeishu(note.id);
     setExporting(false);
+  };
+
+  const handleSyncNotion = async () => {
+    setSyncingNotion(true);
+    await onSyncToNotion(note.id);
+    setSyncingNotion(false);
+  };
+
+  const handleOpenNotionPage = async () => {
+    window.open(note.notion_page_url, '_blank', 'noopener,noreferrer');
   };
 
   // 点击「打开飞书文档」时实时校验文档是否仍存在。
@@ -238,6 +250,23 @@ export function NoteDetail({ note, onBack, onDelete, onExportToFeishu, onUpdateT
           <Button onClick={handleExport} disabled={exporting} variant="primary" size="sm">
             {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
             {t('noteDetail.exportToFeishu')}
+          </Button>
+        )}
+        {note.notion_page_url ? (
+          <>
+            <Button onClick={handleSyncNotion} disabled={syncingNotion} variant="secondary" size="sm">
+              {syncingNotion ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
+              {t('noteDetail.resyncNotion')}
+            </Button>
+            <Button onClick={handleOpenNotionPage} variant="secondary" size="sm">
+              <ExternalLink size={14} />
+              {t('noteDetail.openNotionPage')}
+            </Button>
+          </>
+        ) : (
+          <Button onClick={handleSyncNotion} disabled={syncingNotion} variant="primary" size="sm">
+            {syncingNotion ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
+            {t('noteDetail.syncToNotion')}
           </Button>
         )}
         <div className="flex-1" />

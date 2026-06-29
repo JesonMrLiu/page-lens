@@ -126,6 +126,41 @@ export interface CheckFeishuDocResultMessage {
   error?: string;
 }
 
+export interface TestNotionConnectionMessage {
+  type: typeof MSG_TYPES.TEST_NOTION_CONNECTION;
+  token: string;
+  parentPageId?: string;
+}
+
+export interface TestNotionResultMessage {
+  type: typeof MSG_TYPES.TEST_NOTION_RESULT;
+  success: boolean;
+  error?: string;
+}
+
+export interface SyncToNotionMessage {
+  type: typeof MSG_TYPES.SYNC_TO_NOTION;
+  noteId: number;
+  title: string;
+  content: string;
+  /** 已同步过的 Notion 页面 id；为空表示首次同步（创建新页面） */
+  notionPageId?: string;
+  notionConfig: {
+    token: string;
+    parentPageId?: string;
+  };
+}
+
+export interface SyncToNotionResultMessage {
+  type: typeof MSG_TYPES.SYNC_TO_NOTION_RESULT;
+  success: boolean;
+  pageId?: string;
+  pageUrl?: string;
+  /** created = 新建页面；updated = 更新已有页面 */
+  mode?: 'created' | 'updated';
+  error?: string;
+}
+
 export interface GenerateTitleMessage {
   type: typeof MSG_TYPES.GENERATE_TITLE;
   content: string;
@@ -201,6 +236,10 @@ export type ExtensionMessage =
   | ExportToFeishuResultMessage
   | CheckFeishuDocMessage
   | CheckFeishuDocResultMessage
+  | TestNotionConnectionMessage
+  | TestNotionResultMessage
+  | SyncToNotionMessage
+  | SyncToNotionResultMessage
   | GenerateTitleMessage
   | GenerateTitleResultMessage
   | GetActiveTabMessage
