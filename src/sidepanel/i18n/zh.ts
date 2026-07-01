@@ -201,6 +201,12 @@ const zh: Record<string, string> = {
   'settings.roundsUnit': '{count} 轮',
   'settings.save': '保存设置',
   'settings.saved': '已保存',
+  'settings.quickPromptsTitle': '快捷功能提示词',
+  'settings.quickPromptsDesc': '自定义总结、翻译功能的提示词。清空后将使用默认值。',
+  'settings.quickPromptSummarize': '总结',
+  'settings.quickPromptTranslateZh': '英→中',
+  'settings.quickPromptTranslateEn': '中→英',
+  'settings.resetToDefault': '恢复默认',
 
   // === formatDate ===
   'date.justNow': '刚刚',

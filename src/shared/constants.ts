@@ -76,19 +76,17 @@ export const CHUNK_OVERLAP = 200;
 export const MAX_PAGE_CONTENT_ABSOLUTE = 200000;
 
 // ===================== Prompt Templates =====================
-export const PROMPTS = {
-  summarize: (language: string = 'zh') => {
-    return language === 'zh'
-      ? '请总结当前页面内容，包含核心摘要和关键要点。'
-      : 'Please summarize the current page content, including a core summary and key points.';
-  },
-  translateToZh: () => {
-    return '请将当前页面的内容翻译为中文，保持原有格式。';
-  },
-  translateToEn: () => {
-    return 'Please translate the current page content to English, preserving the original formatting.';
-  },
+/**
+ * 快捷功能（总结 / 英→中 / 中→英）的用户提示词默认值。
+ * key 与 QuickActions 的 action key 对齐，可在「设置 → 通用」中由用户覆盖。
+ */
+export const DEFAULT_QUICK_PROMPTS = {
+  summarize: '请总结当前页面内容，包含核心摘要和关键要点。',
+  'translate-zh': '请将当前页面的内容翻译为中文，保持原有格式。',
+  'translate-en': 'Please translate the current page content to English, preserving the original formatting.',
 } as const;
+
+export type QuickActionKey = keyof typeof DEFAULT_QUICK_PROMPTS;
 
 // ===================== Storage Keys =====================
 export const STORAGE_KEYS = {
@@ -98,6 +96,7 @@ export const STORAGE_KEYS = {
   SETTINGS_THEME: 'ai_summary_theme',
   THINK_NORMAL_ROUNDS: 'ai_summary_think_normal_rounds',
   THINK_DEEP_ROUNDS: 'ai_summary_think_deep_rounds',
+  QUICK_PROMPTS: 'ai_summary_quick_prompts',
 } as const;
 
 // ===================== DB Constants =====================

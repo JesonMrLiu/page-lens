@@ -1,6 +1,6 @@
 import { Sparkles, Languages, Loader2 } from 'lucide-react';
 import { useState, useCallback } from 'react';
-import { PROMPTS } from '@/shared/constants';
+import { DEFAULT_QUICK_PROMPTS, STORAGE_KEYS, type QuickActionKey } from '@/shared/constants';
 import { useToast } from '@/sidepanel/components/shared/Toast';
 import { useTranslation } from '@/sidepanel/contexts/LanguageContext';
 
@@ -14,22 +14,17 @@ export function QuickActions({ onAction, disabled }: QuickActionsProps) {
   const { showToast } = useToast();
   const { t } = useTranslation();
 
-  const handleQuickAction = useCallback((action: 'summarize' | 'translate-zh' | 'translate-en') => {
+  const handleQuickAction = useCallback(async (action: QuickActionKey) => {
     setLoading(action);
     try {
-      let prompt: string;
-      switch (action) {
-        case 'summarize':
-          prompt = PROMPTS.summarize('zh');
-          break;
-        case 'translate-zh':
-          prompt = PROMPTS.translateToZh();
-          break;
-        case 'translate-en':
-          prompt = PROMPTS.translateToEn();
-          break;
-      }
-
+      // 点击时实时读取，保证设置页保存后立即生效
+      const stored = await new Promise<Record<string, string>>((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.QUICK_PROMPTS], (result) => {
+          resolve((result[STORAGE_KEYS.QUICK_PROMPTS] as Record<string, string>) || {});
+        });
+      });
+      // 缺失或被清空则回退到默认值
+      const prompt = stored[action]?.trim() || DEFAULT_QUICK_PROMPTS[action];
       onAction(prompt);
     } catch (err: any) {
       showToast('error', err.message || t('quickActions.actionFailed'));
@@ -38,19 +33,19 @@ export function QuickActions({ onAction, disabled }: QuickActionsProps) {
     }
   }, [onAction, showToast, t]);
 
-  const actions = [
+  const actions: { key: QuickActionKey; labelKey: string; icon: React.ReactNode }[] = [
     {
-      key: 'summarize' as const,
+      key: 'summarize',
       labelKey: 'quickActions.summarize',
       icon: <Sparkles size={14} />,
     },
     {
-      key: 'translate-zh' as const,
+      key: 'translate-zh',
       labelKey: 'quickActions.translateToZh',
       icon: <Languages size={14} />,
     },
     {
-      key: 'translate-en' as const,
+      key: 'translate-en',
       labelKey: 'quickActions.translateToEn',
       icon: <Languages size={14} />,
     },

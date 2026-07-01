@@ -201,6 +201,12 @@ const en: Record<string, string> = {
   'settings.roundsUnit': '{count} rounds',
   'settings.save': 'Save settings',
   'settings.saved': 'Saved',
+  'settings.quickPromptsTitle': 'Quick Action Prompts',
+  'settings.quickPromptsDesc': 'Customize prompts for summarize and translate. Empty fields fall back to defaults.',
+  'settings.quickPromptSummarize': 'Summarize',
+  'settings.quickPromptTranslateZh': 'En→Zh',
+  'settings.quickPromptTranslateEn': 'Zh→En',
+  'settings.resetToDefault': 'Reset to default',
 
   // === formatDate ===
   'date.justNow': 'Just now',
